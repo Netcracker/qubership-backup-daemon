@@ -1,0 +1,97 @@
+---
+# The structure of this yaml is the same as structure of original json with metrics,
+# but it contains only fields that should be in prometheus metrics.
+# If value of the scalar is a dictionary, it repeat structure of original json.
+# If value of the scalar is a list, this scalar is a metric:
+#   "json's metric name":
+#     - "prometheus_metric_name" (mandatory field)
+#     - "prometheus metric description" (mandatory field)
+#     - { "label_name_1": "path.of.label.value.in.json", "label_name_2": ... } (optional field)
+backup_queue_size:
+  - backup_queue_size
+  - 'backup daemon queue size'
+status:
+  - backup_daemon_status
+  - 'status of backup daemon (1.0 if "UP", 0.0 otherwise)'
+storage:
+  dump_count:
+    - backup_storage_dump_count
+    - 'number of backups'
+  free_inodes:
+    - backup_storage_free_inodes
+    - 'free number of inodes on storage'
+  free_space:
+    - backup_storage_free_space
+    - 'free space left in bytes'
+  last:
+    failed:
+      - backup_storage_last_failed
+      - 'is last backup failed or not'
+      - { id: storage.last.id }
+    locked:
+      - backup_storage_last_locked
+      - 'is last backup locked or not'
+      - { id: storage.last.id }
+    metrics:
+      exit_code:
+        - backup_storage_last_exit_code
+        - 'exit code of script'
+        - { id: storage.last.id }
+      size:
+        - backup_storage_last_size
+        - 'backup size in bytes'
+        - { id: storage.last.id }
+      spent_time:
+        - backup_storage_last_spent_time
+        - 'spent time'
+        - { id: storage.last.id }
+    sharded:
+      - backup_storage_last_sharded
+      - 'is last backup sharded or not'
+      - { id: storage.last.id }
+    ts:
+      - backup_storage_last_timestamp
+      - 'timestamp of last backup'
+      - { id: storage.last.id }
+  lastSuccessful:
+    failed:
+      - backup_storage_last_successful_failed
+      - 'is last successful backup failed or not'
+      - { id: storage.lastSuccessful.id }
+    locked:
+      - backup_storage_last_successful_locked
+      - 'is last successful backup locked or not'
+      - { id: storage.lastSuccessful.id }
+    metrics:
+      exit_code:
+        - backup_storage_last_successful_exit_code
+        - 'exit code of script'
+        - { id: storage.lastSuccessful.id }
+      size:
+        - backup_storage_last_successful_size
+        - 'backup size in bytes'
+        - { id: storage.lastSuccessful.id }
+      spent_time:
+        - backup_storage_last_successful_spent_time
+        - 'spent time'
+        - { id: storage.lastSuccessful.id }
+    sharded:
+      - backup_storage_last_successful_sharded
+      - 'is last successful backup sharded or not'
+      - { id: storage.lastSuccessful.id }
+    ts:
+      - backup_storage_last_successful_timestamp
+      - 'timestamp of last successful backup'
+      - { id: storage.lastSuccessful.id }
+  size:
+    - backup_storage_size
+    - 'used space in bytes'
+  total_inodes:
+    - backup_storage_inodes_total
+    - 'total number of inodes on storage'
+  total_space:
+    - backup_storage_space_total
+    - 'total storage space in bytes'
+  used_inodes:
+    - backup_storage_used_inodes
+    - 'used number of inodes on storage'
