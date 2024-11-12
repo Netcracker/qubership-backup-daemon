@@ -1,0 +1,16 @@
+version: '2'
+services:
+  backup-daemon:
+#    image: ghcr.io/netcracker/backup-daemon:main_alpine
+    build:
+      context: ../alpine
+      dockerfile: Dockerfile
+    ports:
+      - 8080:8080
+    volumes:
+      - ./backup-daemon.conf:/etc/backup-daemon.conf
+    environment:
+      - BACKUP_SCHEDULE=0 * * * *
+      - EVICTION_POLICY=1h/1h
+      - IPV6=false
+      - LOG_LEVEL=DEBUG
