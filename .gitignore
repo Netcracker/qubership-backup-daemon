@@ -1,0 +1,9 @@
+/.project
+/.pydevproject
+/.settings
+*.pyc
+.idea/
+/.venv
+_build/
+*.iml
+#
