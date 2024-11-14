@@ -31,10 +31,6 @@
 
 ## Pull requests
 
-During PR creation:
-
-* set a label - it must have a correspond MR type - documentation, improvement, feature or bug
-
 ## Release
 
 The base repository is available to make various backup daemons for different databases such as Mongo, and Postgresql.
