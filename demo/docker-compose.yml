@@ -1,7 +1,7 @@
 version: '2'
 services:
   backup-daemon:
-#    image: backup-daemon:master_latest_alpine
+#    image: ghcr.io/netcracker/backup-daemon:main_alpine
     build:
       context: ../alpine
       dockerfile: Dockerfile
