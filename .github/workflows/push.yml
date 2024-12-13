@@ -14,7 +14,7 @@ jobs:
       fail-fast: false
       matrix:
         component:
-          - name: backup-daemon
+          - name: qubership-backup-daemon
             file: alpine/Dockerfile
             base: alpine
     runs-on: ubuntu-latest
