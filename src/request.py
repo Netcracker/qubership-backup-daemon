@@ -23,7 +23,7 @@ import constants
 
 safe_args = re.compile('[0-9a-z-_]', re.I)
 log = logging.getLogger("RequestHandler")
-allowed_api_keys = ["allow_eviction", "args", "dbs", "vault", "ts", "changeDbNames", "sharded", "externalBackupPath"]
+allowed_api_keys = ["allow_eviction", "args", "dbs", "vault", "ts", "changeDbNames", "sharded", "externalBackupPath", "prefix"]
 allowed_extensions = ["zip", "tgz"]
 
 
@@ -81,6 +81,12 @@ class RequestHelper:
             return content['externalBackupPath']
         else:
             return None
+
+    def get_backup_prefix(self):
+        content = self.__content
+        if 'prefix' in content:
+            return content['prefix']
+        return None
 
     def get_external(self):
         content = self.__content

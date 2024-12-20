@@ -246,10 +246,11 @@ class Backup(Resource):
         proc_type = req_helper.get_proc_type()
         sharded = req_helper.get_sharded()
         backup_path = req_helper.get_backup_path()
+        backup_prefix = req_helper.get_backup_prefix()
 
         try:
             backup_id = backupExecutor.enqueue_backup("http call", custom_variables, allow_eviction,
-                                                      dbs, proc_type, sharded, backup_path)
+                                                      dbs, proc_type, sharded, backup_path, backup_prefix)
             return Response(backup_id, mimetype="application/json")
         except IllegalStateException as ise:
             error_msg = "Error during backup process: %s" % ise.message
