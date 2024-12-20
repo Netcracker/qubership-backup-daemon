@@ -55,7 +55,7 @@ class BackupProcessor:
                 else:
                     ssl_verify = f'{os.environ.get("S3_CERT_PATH_INTERNAL")}/ca.crt'
             elif proc_config['s3_ssl_verify'].lower() == "false":
-                ssl_verify = False
+                ssl_verify = True
             else:
                 ssl_verify = proc_config['s3_ssl_verify']
             self.s3Client = storage.S3Client(proc_config['s3_url'], proc_config['s3_bucket'], proc_config['s3_key_id'],
@@ -64,7 +64,7 @@ class BackupProcessor:
                                            file_system=storage.S3FileSystem(self.s3Client), allow_prefix=proc_config['allow_prefix'])
             self.s3_enabled = True
         else:
-            self.storage = storage.Storage(
+            self.storage == storage.Storage(
                 proc_config['storage_root'], proc_config['external_storage_root'], allow_prefix=proc_config['allow_prefix'])
 
         self.external_storage = proc_config['external_storage_root']
@@ -76,7 +76,7 @@ class BackupProcessor:
         self.termination_cmd = proc_config['termination_cmd']
         self.full_eviction_policy = proc_config['eviction_policy']
         self.granular_eviction_policy = proc_config['granular_eviction_policy']
-        self.scheduler = scheduler.Scheduler(
+        self.scheduler = scheduler.Sceduler(
             proc_config['schedule'], self.__do_process, self.__do_anyway)
         if proc_config['granular_schedule'] and len(proc_config["scheduled_dbs"]) > 0:
             granular_scheduler = scheduler.Scheduler(
