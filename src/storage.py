@@ -285,13 +285,15 @@ SHARDED = 'sharded'
 class Storage(object):
     __log = logging.getLogger("Storage")
 
-    def __init__(self, root, external_root=None, file_system=FileSystem()):
+    def __init__(self, root, external_root=None, file_system=FileSystem(), allow_prefix=False):
         self.__log.info("Init storage object with storage root: %s external root: %s" % (root, external_root))
         self.root = root
+        self.namespace = os.getenv("WATCH_NAMESPACE", "")
         self.file_system = file_system
         self.granular_folder = self.root + "/" + GRANULAR
         self.restore_logs_folder = self.root + "/restore_logs"
         self.s3_enabled = isinstance(file_system, S3FileSystem)
+        self.allow_prefix = allow_prefix
 
         if external_root is not None:
             self.external_root = external_root
@@ -300,6 +302,15 @@ class Storage(object):
             self.file_system.makedirs(self.granular_folder)
         if not file_system.exists(self.restore_logs_folder):
             self.file_system.makedirs(self.restore_logs_folder)
+
+    def get_vault_name(self, prefix, is_granular):
+        if not is_granular or not self.namespace or not self.allow_prefix:
+            return datetime.now().strftime(VAULT_NAME_FORMAT)
+        vault_name = ""
+        if prefix:
+            vault_name += prefix + "_"
+        vault_name += self.namespace + "_" + datetime.now().strftime(VAULT_NAME_FORMAT)
+        return vault_name
 
     def get_nonevictable_vaults(self):
         return [vault for vault in self.list() if vault.is_nonevictable()]
@@ -350,7 +361,7 @@ class Storage(object):
             vaults = [
                 self.get_vault(dirname, storage_path is not None, storage_path, skip_fs_check=True)
                 for dirname in dirs
-                if VAULT_DIRNAME_MATCHER.match(dirname.replace(GRANULAR + '/', '')) is not None
+                if VAULT_DIRNAME_MATCHER.match(dirname.split("_")[-1:][0].replace(GRANULAR + '/', '')) is not None
             ]
 
             if type == SHARDED:
@@ -398,7 +409,7 @@ class Storage(object):
         return fsutil.get_fs_space(self.root)
 
     def open_vault(self, vault_name=None, allow_eviction=True, is_granular=False, is_sharded=False,
-                   is_external=False, vault_path=None):
+                   is_external=False, vault_path=None, backup_prefix=None):
         vault = self.get_vault(vault_name, is_external, vault_path)
         self.__log.info(vault)
         if vault is not None:
@@ -416,13 +427,13 @@ class Storage(object):
                     folder = self.external_root + "/" + vault_path
             if not vault_name:
                 try:
-                    result = Vault("%s/%s" % (folder, datetime.now().strftime(VAULT_NAME_FORMAT)),
+                    result = Vault("%s/%s" % (folder, self.get_vault_name(backup_prefix, is_granular)),
                                    allow_eviction, is_sharded, file_system=self.file_system)
                 except StorageLocationAlreadyExistsException as e:
                     # sleep 2 secs if vault exists
                     time.sleep(2)
                     try:
-                        result = Vault("%s/%s" % (folder, datetime.now().strftime(VAULT_NAME_FORMAT)),
+                        result = Vault("%s/%s" % (folder, self.get_vault_name(backup_prefix, is_granular)),
                                        allow_eviction, is_sharded, file_system=self.file_system)
                     except StorageLocationAlreadyExistsException as e:
                         logging.error(str(e))
@@ -463,7 +474,6 @@ class Storage(object):
 @total_ordering
 class Vault(object):
     __log = logging.getLogger("VaultLock")
-
     def __init__(self, folder, allow_eviction=True, sharded=False, external=False,
                  file_system=FileSystem()):
         self.folder = folder
@@ -569,7 +579,7 @@ class Vault(object):
     def create_time(self):
         try:
             folder_name = self.get_name()
-            d = datetime.strptime(folder_name, VAULT_NAME_FORMAT)
+            d = datetime.strptime(folder_name.split("_")[-1:][0], VAULT_NAME_FORMAT)
             return time.mktime(d.timetuple())
         except ValueError:
             self.__log.warning(

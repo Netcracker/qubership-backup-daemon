@@ -76,6 +76,7 @@ The config file parameters are given below.
 | s3_ssl_verify                   |                                                                                 | Whether or not to verify SSL certificates for S3 connections                                                                                                             | S3_SSL_VERIFY            |
 | s3_certs_path                   | `""`                                                                            | Path to folder with TLS certificates for S3 connections, only takes effect if `s3_ssl_verify` is `true`. Value `""` means that boto3 default certificates will be used   | S3_CERTS_PATH            |
 | tls_enabled                     | `false`                                                                         | Whether TLS is enabled                                                                                                                                                   | TLS_ENABLED              |
+| allow_prefix                    |                                                                                 | Allow specify additional prefix for granular backups                                                                                                                     | ALLOW_PREFIX             |
 | certs_path                      | `/tls/`                                                                         | Path to folder with TLS certificates                                                                                                                                     | CERTS_PATH               |
 | logs_to_stdout                  | `false`                                                                         | Prints logs from .console and ${restore-id}.log to stdout (pod logs)                                                                                                     | LOGS_TO_STDOUT           |
 <!-- markdownlint-enable line-length -->
@@ -234,6 +235,15 @@ For DBs with collections and queries use the following command:
 ```bash
 curl -XPOST -u username:password -v -H "Content-Type: application/json" -d '{"dbs":["db_name1",{"db_name2":{"collections":["first",{"second":{"test1":"1"}}]}]}' localhost:8080/backup
 ```
+
+It is possible to add custom prefix for folder (vault):  
+***NOTE***: to make it possible you have to specify ENV `ALLOW_PREFIX:true` 
+```bash
+curl -XPOST -u username:password -v -H "Content-Type: application/json" -d '{"dbs":["db_name1","db_name2"], "prefix":"custom"}' localhost:8080/backup
+```
+
+Returned vault name will be like `<prefix>_<namespace>_<timestamp>`.  
+So `<prefix>` is optional, but `<namespace>` addition is default for `ALLOW_PREFIX:true` (namespace will be picked from `WATCH_NAMESPACE` ENV)
 
 #### Run Manual Backup That Will Not Be Deleted Ever
 

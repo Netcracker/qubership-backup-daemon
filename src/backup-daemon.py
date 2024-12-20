@@ -61,11 +61,11 @@ class BackupProcessor:
             self.s3Client = storage.S3Client(proc_config['s3_url'], proc_config['s3_bucket'], proc_config['s3_key_id'],
                                              proc_config['s3_key_secret'], ssl_verify)
             self.storage = storage.Storage(proc_config['storage_root'], proc_config['external_storage_root'],
-                                           file_system=storage.S3FileSystem(self.s3Client))
+                                           file_system=storage.S3FileSystem(self.s3Client), allow_prefix=proc_config['allow_prefix'])
             self.s3_enabled = True
         else:
             self.storage = storage.Storage(
-                proc_config['storage_root'], proc_config['external_storage_root'])
+                proc_config['storage_root'], proc_config['external_storage_root'], allow_prefix=proc_config['allow_prefix'])
 
         self.external_storage = proc_config['external_storage_root']
         self.db = db.DB(self.storage.root + "/backup.sqlite")
@@ -114,7 +114,7 @@ class BackupProcessor:
         except Exception as e:
             log.error(f"Can't terminate pid {pid}, {e}")
 
-    def enqueue_backup(self, reason, custom_variables, allow_eviction=True, dbs=None, sharded=False, backup_path=None):
+    def enqueue_backup(self, reason, custom_variables, allow_eviction=True, dbs=None, sharded=False, backup_path=None, backup_prefix=None):
         if dbs:
             is_granular = True
         else:
@@ -123,7 +123,7 @@ class BackupProcessor:
         if backup_path is None:
             vault = self.storage.open_vault(vault_name=backup_path, allow_eviction=allow_eviction,
                                             is_granular=is_granular,
-                                            is_sharded=sharded, is_external=False)
+                                            is_sharded=sharded, is_external=False, vault_path=backup_path, backup_prefix=backup_prefix)
         else:
             vault = self.storage.open_vault(allow_eviction=allow_eviction,
                                             is_granular=False,
@@ -584,7 +584,7 @@ class BackupExecutor:
         else:
             return self.backup_processor
 
-    def enqueue_backup(self, reason, custom_variables, allow_eviction=True, dbs=None, proc_type=FULL, sharded=False, backup_path=None):
+    def enqueue_backup(self, reason, custom_variables, allow_eviction=True, dbs=None, proc_type=FULL, sharded=False, backup_path=None, backup_prefix=None):
         processor = self.get_processor(proc_type)
         dir_type = None
         if dbs and backup_path is None:
@@ -614,7 +614,7 @@ class BackupExecutor:
                     "Existing backups not found. Previous full or incremental backups must exist"
                     " before doing incremental backup")
 
-        return processor.enqueue_backup(reason, custom_variables, allow_eviction, dbs, sharded, backup_path)
+        return processor.enqueue_backup(reason, custom_variables, allow_eviction, dbs, sharded, backup_path, backup_prefix)
 
     def enqueue_eviction(self, proc_type=FULL):
         processor = self.get_processor(proc_type)
@@ -669,6 +669,7 @@ def fetch_config(config_type='full'):
             'granular_eviction_policy': conf.get_string(config_prefix + 'granular_eviction'),
             'incremental_enabled': conf.get_string('incremental_enabled'),
             'termination_cmd': conf.get_string('termination_command', default=''),
+            'allow_prefix': conf.get_string('allow_prefix', default='')
         }
         if len(dict["scheduled_dbs"]) > 0:
             dict["scheduled_dbs"] = dict["scheduled_dbs"].split(",")
