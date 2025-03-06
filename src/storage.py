@@ -209,8 +209,7 @@ class S3FileSystem(FileSystem):
                 if VAULT_DIRNAME_MATCHER.match(split_prefix[-1]):
                     dirs.append(split_prefix[-1])    
         except ClientError as e:
-            self.__log.error(f'Could not list files from path {path}, error message
-            {e}')
+            self.__log.error(f'Could not list files from path {path}, error message {e}')
             raise e
         return dirs
 
