@@ -202,11 +202,15 @@ class S3FileSystem(FileSystem):
         dirs = []
         path = path.strip("/")
         path = path + "/"
-        res = self.s3client.client.list_objects_v2(Bucket=self.s3client.bucket_name, Prefix=path, Delimiter="/")
-        for prefix in res.get('CommonPrefixes', []):
-            split_prefix = prefix["Prefix"].strip("/").split("/")
-            if VAULT_DIRNAME_MATCHER.match(split_prefix[-1]):
-                dirs.append(split_prefix[-1])
+        try:
+            res = self.s3client.client.list_objects_v2(Bucket=self.s3client.bucket_name, Prefix=path, Delimiter="/")
+            for prefix in res.get('CommonPrefixes', []):
+                split_prefix = prefix["Prefix"].strip("/").split("/")
+                if VAULT_DIRNAME_MATCHER.match(split_prefix[-1]):
+                    dirs.append(split_prefix[-1])    
+        except ClientError as e:
+            self.__log.error(f'Could not list files from path {path}, error message {e}')
+            raise e
         return dirs
 
     def exists(self, path, type="dir"):
@@ -221,6 +225,9 @@ class S3FileSystem(FileSystem):
             except ClientError as e:
                 if e.response['Error']['Code'] == "404":
                     return False
+                else:
+                    self.__log.error(f'Could not check if file exists from path {path}, error message: {e}')
+                    raise e
             return True
 
     def makedirs(self, path):

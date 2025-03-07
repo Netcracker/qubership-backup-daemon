@@ -438,6 +438,7 @@ class BackupProcessor:
                         "Vault %s is found and is going to be deleted...", vault_name)
                     self.storage.evict(vault_object)
                     if self.vault_was_evicted(vault_name):
+                        self.db.rm_vault_from_base(vault_object.get_name(), login=True)
                         msg = "Backup %s successfully removed" % vault_name
                         log.info(msg)
                         if self.evict_cmd:
