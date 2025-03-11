@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import logging
+import threading
 import apsw
 
 
@@ -29,6 +30,8 @@ class DbException(Exception):
 
 
 class DB:
+    _lock = threading.Lock()
+    
     def __init__(self, dbfile):
         """
         Create a connection to sqlite database
@@ -74,8 +77,9 @@ class DB:
 
     @staticmethod
     def __log_and_execute(cursor, sql, args):
-        log.debug("SQL command: " + sql.replace('?', '%s') % args)
-        cursor.execute(sql, args)
+        with DB._lock:
+            log.debug("SQL command: " + sql.replace('?', '%s') % args)
+            cursor.execute(sql, args)
 
     def __insert_or_delete(self, query, params, login=False):
         try:
