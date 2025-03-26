@@ -1,4 +1,4 @@
-FROM python:3.10-alpine
+FROM python:3.10-alpine3.20
 
 ENV BACKUP_DAEMON_HOME=/opt/backup
 ENV S3_CERT_PATH_INTERNAL=/s3CertInternal
