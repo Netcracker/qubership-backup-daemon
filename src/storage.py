@@ -106,6 +106,7 @@ class S3Client:
         self.client = boto3.client(
             "s3",
             endpoint_url=url,
+            region_name="ua-east-1",
             aws_access_key_id=access_key_id,
             aws_secret_access_key=access_key_secret,
             config=client_config,
