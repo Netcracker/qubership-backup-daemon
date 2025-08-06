@@ -105,7 +105,7 @@ class S3Client:
 
         self.client = boto3.client(
             "s3",
-            endpoint_url=url,
+            # endpoint_url=url,
             region_name="us-east-1",
             aws_access_key_id=access_key_id,
             aws_secret_access_key=access_key_secret,
@@ -115,8 +115,8 @@ class S3Client:
 
         self.resource = boto3.resource(
             "s3",
-            region_name="auto",
-            endpoint_url=self.url,
+            region_name="us-east-1",
+            # endpoint_url=self.url,
             aws_access_key_id=self.access_key_id,
             aws_secret_access_key=self.access_key_secret,
             verify=ssl_verify
@@ -217,6 +217,7 @@ class S3FileSystem(FileSystem):
     def exists(self, path, type="dir"):
         path = path.strip("/")
         if type == "dir":
+            self.__log.info(f"Client config: region={self.s3client.client.meta.region_name}, endpoint={self.s3client.client.meta.endpoint_url}")
             resp = self.s3client.client. \
                 list_objects(Bucket=self.s3client.bucket_name, Prefix=path, MaxKeys=1)
             return 'Contents' in resp
