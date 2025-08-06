@@ -99,13 +99,13 @@ class S3Client:
         self.bucket_name = bucket_name
 
         client_config = config.Config(
-            region_name="auto",
+            region_name="us-east-1",
             max_pool_connections=int(os.getenv("NC_S3_MAX_POOL", 30)),
         )
 
         self.client = boto3.client(
             "s3",
-            # endpoint_url=url,
+            endpoint_url=url,
             region_name="us-east-1",
             aws_access_key_id=access_key_id,
             aws_secret_access_key=access_key_secret,
@@ -116,7 +116,7 @@ class S3Client:
         self.resource = boto3.resource(
             "s3",
             region_name="us-east-1",
-            # endpoint_url=self.url,
+            endpoint_url=self.url,
             aws_access_key_id=self.access_key_id,
             aws_secret_access_key=self.access_key_secret,
             verify=ssl_verify
