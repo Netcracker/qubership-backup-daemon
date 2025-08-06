@@ -106,7 +106,7 @@ class S3Client:
         self.client = boto3.client(
             "s3",
             endpoint_url=url,
-            region_name="ua-east-1",
+            region_name="us-east-1",
             aws_access_key_id=access_key_id,
             aws_secret_access_key=access_key_secret,
             config=client_config,
@@ -189,7 +189,7 @@ class S3Client:
             if obj.key[-1] == '/':
                 continue
             bucket.download_file(obj.key, target)
-        
+
         self.__log.info(f"finished saving {s3_folder}")
 
 
@@ -208,7 +208,7 @@ class S3FileSystem(FileSystem):
             for prefix in res.get('CommonPrefixes', []):
                 split_prefix = prefix["Prefix"].strip("/").split("/")
                 if VAULT_DIRNAME_MATCHER.match(split_prefix[-1]):
-                    dirs.append(split_prefix[-1])    
+                    dirs.append(split_prefix[-1])
         except ClientError as e:
             self.__log.error(f'Could not list files from path {path}, error message {e}')
             raise e
