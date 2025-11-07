@@ -19,7 +19,7 @@ flask-restx==1.1.0
 html5lib==1.1
 idna==3.7
 itsdangerous==2.0.1
-Jinja2==3.1.5
+Jinja2==3.1.6
 jmespath==0.10.0
 jsonschema==4.4.0
 lockfile==0.12.2
