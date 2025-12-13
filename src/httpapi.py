@@ -702,10 +702,21 @@ class BackupV2(Resource):
             return Response(response="databases must be a list of strings", status=400)
 
         custom_variables = {k: v for k, v in configuration.config.custom_vars.items() if v}
+        custom_variables["storageName"] = storage_name
+        custom_variables["prefix"] = blob_path
 
         proc_type = RequestHelper(request).get_proc_type()
 
-        backup_id = backupExecutor.enqueue_backup( "http v2", custom_variables, True, databases, proc_type, False, None, blob_path)
+        backup_id = backupExecutor.enqueue_backup(
+            reason="http v2",
+            custom_variables=custom_variables,
+            allow_eviction=True,
+            dbs=databases,
+            proc_type=proc_type,
+            sharded=False,
+            backup_path=None,
+            backup_prefix=blob_path,
+        )
 
         resp = {
             "status": "notStarted",
