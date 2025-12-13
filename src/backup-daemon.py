@@ -114,7 +114,7 @@ class BackupProcessor:
         except Exception as e:
             log.error(f"Can't terminate pid {pid}, {e}")
 
-    def enqueue_backup(self, reason, custom_variables, allow_eviction=True, dbs=None, sharded=False, backup_path=None, backup_prefix=None, vault_path=None):
+    def enqueue_backup(self, reason, custom_variables, allow_eviction=True, dbs=None, sharded=False, backup_path=None, backup_prefix=None):
         if dbs:
             is_granular = True
         else:
@@ -130,13 +130,12 @@ class BackupProcessor:
                                             is_sharded=sharded, is_external=True, vault_path=backup_path)
         vault_name = vault.get_name()
         backup_id = vault.get_name()
-        external = backup_path is not None
 
         self.db.update_job(backup_id, action, "Queued", None, None)
         self.scheduler.enqueue_execution(reason=reason, action=action, allow_eviction=allow_eviction,
                                          dbs=dbs, vault_name=vault_name, task_id=backup_id,
                                          custom_variables=custom_variables, sharded=sharded,
-                                         external=backup_path is not None, vault_path=(backup_path if external else vault_path))
+                                         external=backup_path is not None, vault_path=backup_path)
         # sleep for 2 secs to prevent conflicts in DB
         time.sleep(2)
         return backup_id

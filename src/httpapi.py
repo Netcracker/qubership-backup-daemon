@@ -705,7 +705,7 @@ class BackupV2(Resource):
 
         proc_type = RequestHelper(request).get_proc_type()
 
-        backup_id = backupExecutor.enqueue_backup( "http v2", custom_variables, True, databases, proc_type, False, None, None, blob_path)
+        backup_id = backupExecutor.enqueue_backup( "http v2", custom_variables, True, databases, proc_type, False, None, blob_path)
 
         resp = {
             "status": "notStarted",
