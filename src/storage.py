@@ -153,10 +153,16 @@ class S3Client:
             files.append(obj['Key'])
         return files
 
-    def upload_folder(self, path):
+    def upload_folder(self, path, dest_root=None):
         for root, dirs, files in os.walk(path, topdown=False):
             for name in files:
-                self.upload_file(os.path.join(root, name), os.path.join(root, name))
+                src = os.path.join(root, name)
+                if dest_root:
+                    rel = os.path.relpath(src, path)        
+                    dest = os.path.join(dest_root, rel)       
+                else:
+                    dest = src
+                self.upload_file(src, dest)
 
     def upload_file(self, src, dest: str=None):
         if dest is None:
