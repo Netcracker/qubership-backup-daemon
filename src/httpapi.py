@@ -26,6 +26,8 @@ from flask_restx import Resource, Api
 import fsutil
 from prometheus_metrics.layout_metrics import prometheus_metrics_from_json
 from request import RequestHelper, ApiException
+from datetime import datetime, timezone
+import configuration
 
 
 class IllegalStateException(Exception):
@@ -64,6 +66,24 @@ log.addHandler(file_handler)
 
 backupExecutor = None
 auth = HTTPBasicAuth()
+
+def _rfc3339_now() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+def _rfc3339_from_ts_ms(ts_ms: int) -> str:
+    return datetime.fromtimestamp(ts_ms / 1000.0, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+
+def _map_job_status_to_v2(status: str) -> str:
+    if status == "Successful":
+        return "completed"
+    if status == "Failed":
+        return "failed"
+    if status == "Processing":
+       return "inProgress"
+    return "notStarted"
+
+def _mk_db_list(databases, db_status: str):
+    return [{"databaseName": d, "status": db_status} for d in (databases or [])]
 
 
 # Logic to separate APIS by groups/namespace in Swagger
@@ -663,3 +683,80 @@ class Terminate(Resource):
         message, code = backupExecutor.terminate_backup(backup_id, backup_path)
         log.debug("TERMINATE BACKUP: %s, %s", message, code)
         return Response(json.dumps(message), status=code, mimetype="application/json")
+
+
+@api.route('/api/v2/backup')
+class BackupV2(Resource):
+    @auth.login_required
+    @api.doc(responses={200: "OK", 400: "Bad Request", 500: "Internal Server Error"})
+    def post(self):
+        payload = request.get_json(silent=True) or {}
+
+        storage_name = payload.get("storageName", "")
+        blob_path = payload.get("blobPath")
+        databases = payload.get("databases", [])
+
+        if not blob_path or not isinstance(blob_path, str):
+            return Response(response="blobPath must be a non-empty string", status=400)
+        if not isinstance(databases, list) or any(not isinstance(x, str) for x in databases):
+            return Response(response="databases must be a list of strings", status=400)
+
+        custom_variables = {k: v for k, v in configuration.config.custom_vars.items() if v}
+
+        proc_type = RequestHelper(request).get_proc_type()
+
+        backup_id = backupExecutor.enqueue_backup( "http v2", custom_variables, True, databases, proc_type, False, blob_path, None)
+
+        resp = {
+            "status": "notStarted",
+            "backupId": backup_id,
+            "creationTime": _rfc3339_now(),
+            "storageName": storage_name,
+            "blobPath": blob_path,
+            "databases": _mk_db_list(databases, "notStarted"),
+        }
+        return Response(response=json.dumps(resp), status=200, mimetype="application/json")
+
+
+@api.route('/api/v2/backup/<string:backup_id>')
+@api.doc(description="Adapter-style API. Requires ?blobPath=<path> to locate backup.")
+class BackupV2Status(Resource):
+    @auth.login_required
+    @api.doc(responses={200: "OK", 400: "Bad Request", 404: "Not Found", 500: "Internal Server Error"})
+    def get(self, backup_id: str):
+        blob_path = request.args.get("blobPath")
+        if not blob_path:
+            return Response(response="blobPath query param is required", status=400)
+
+        proc_type = RequestHelper(request).get_proc_type()
+
+        job_msg, job_code = backupExecutor.get_job_status(backup_id, proc_type)
+        if job_code == 404:
+            return Response(response=json.dumps(job_msg), status=404, mimetype="application/json")
+
+        overall = _map_job_status_to_v2(job_msg.get("status"))
+
+
+        creation_time = _rfc3339_now()
+        dbs = []
+        stats, stats_code = backupExecutor.get_backup_stats(backup_id, proc_type, None, blob_path)
+        if stats_code == 200 and isinstance(stats, dict):
+            try:
+                creation_time = _rfc3339_from_ts_ms(int(stats.get("ts")))
+            except Exception:
+                pass
+            try:
+                processor = backupExecutor.get_processor(proc_type)
+                dbs = processor._BackupProcessor__get_backup_dbs(backup_id, vault_path=blob_path)
+            except Exception:
+                dbs = []
+
+        resp = {
+            "status": overall,
+            "backupId": backup_id,
+            "creationTime": creation_time,
+            "storageName": "",
+            "blobPath": blob_path,
+            "databases": _mk_db_list(dbs, overall),
+        }
+        return Response(response=json.dumps(resp), status=200, mimetype="application/json")
