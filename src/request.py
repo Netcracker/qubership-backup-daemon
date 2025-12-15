@@ -23,7 +23,7 @@ import constants
 
 safe_args = re.compile('[0-9a-z-_]', re.I)
 log = logging.getLogger("RequestHandler")
-allowed_api_keys = ["allow_eviction", "args", "dbs", "vault", "ts", "changeDbNames", "sharded", "externalBackupPath", "prefix"]
+allowed_api_keys = ["allow_eviction", "args", "dbs", "vault", "ts", "changeDbNames", "sharded", "externalBackupPath", "prefix", "storageName", "blobPath"]
 allowed_extensions = ["zip", "tgz"]
 
 

@@ -701,11 +701,13 @@ class BackupV2(Resource):
         if not isinstance(databases, list) or any(not isinstance(x, str) for x in databases):
             return Response(response="databases must be a list of strings", status=400)
 
+        normalized_blob = blob_path.lstrip('/')
         custom_variables = {k: v for k, v in configuration.config.custom_vars.items() if v}
         custom_variables["storageName"] = storage_name
         custom_variables["prefix"] = blob_path
 
         proc_type = RequestHelper(request).get_proc_type()
+        backup_prefix_param = {"prefix": normalized_blob, "allow": True}
 
         backup_id = backupExecutor.enqueue_backup(
             reason="http v2",
@@ -715,7 +717,7 @@ class BackupV2(Resource):
             proc_type=proc_type,
             sharded=False,
             backup_path=None,
-            backup_prefix=blob_path,
+            backup_prefix=backup_prefix_param,
         )
 
         resp = {
@@ -723,7 +725,7 @@ class BackupV2(Resource):
             "backupId": backup_id,
             "creationTime": _rfc3339_now(),
             "storageName": storage_name,
-            "blobPath": blob_path,
+            "blobPath": normalized_blob,
             "databases": _mk_db_list(databases, "notStarted"),
         }
         return Response(response=json.dumps(resp), status=200, mimetype="application/json")
@@ -738,6 +740,8 @@ class BackupV2Status(Resource):
         blob_path = request.args.get("blobPath")
         if not blob_path:
             return Response(response="blobPath query param is required", status=400)
+        
+        blob_path = blob_path.strip('"').lstrip('/')
 
         proc_type = RequestHelper(request).get_proc_type()
 
@@ -746,6 +750,7 @@ class BackupV2Status(Resource):
             return Response(response=json.dumps(job_msg), status=404, mimetype="application/json")
 
         overall = _map_job_status_to_v2(job_msg.get("status"))
+        custom_variables = {k: v for k, v in configuration.config.custom_vars.items() if v}
 
 
         creation_time = _rfc3339_now()
@@ -766,7 +771,7 @@ class BackupV2Status(Resource):
             "status": overall,
             "backupId": backup_id,
             "creationTime": creation_time,
-            "storageName": "",
+            "storageName": custom_variables["storageName"],
             "blobPath": blob_path,
             "databases": _mk_db_list(dbs, overall),
         }
