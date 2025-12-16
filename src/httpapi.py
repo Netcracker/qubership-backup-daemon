@@ -696,11 +696,11 @@ class BackupV2(Resource):
         blob_path = req_helper.get_blob_path()
         databases = req_helper.get_db_names()
         custom_variables = req_helper.get_custom_vars()
+        proc_type = req_helper.get_proc_type()
         
         custom_variables["storageName"] = storage_name
         custom_variables["blob_path"] = blob_path
 
-        proc_type = RequestHelper(request).get_proc_type()
 
         backup_id = backupExecutor.enqueue_backup(
             reason="api v2",
