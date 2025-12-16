@@ -137,7 +137,7 @@ class BackupProcessor:
         backup_id = vault.get_name()
         cv = custom_variables or {}
 
-        self.db.update_job(backup_id, action, "Queued", None, None, storage_name=cv.get("storageName"), blob_path=cv.get("blob_path"))
+        self.db.update_job(backup_id, action, "Queued", None, None, storage_name=cv.get("storageName"), blob_path=cv.get("blobPath"))
         self.scheduler.enqueue_execution(reason=reason, action=action, allow_eviction=allow_eviction,
                                          dbs=dbs, vault_name=vault_name, task_id=backup_id,
                                          custom_variables=custom_variables, sharded=sharded,

@@ -115,7 +115,7 @@ class DB:
             raise DbException(error_message)
         if self.__select("SELECT * FROM %s WHERE task_id = ?" % self.__tableName, (task_id,), login=login):
             if not self.__insert_or_delete(
-                    "UPDATE " + self.__tableName + " SET 'type'=?, 'status'=?, 'vault'=?, 'err'=?, storage_name=?, blob_path=? where task_id=?",
+                    "UPDATE " + self.__tableName + " SET 'type'=?, 'status'=?, 'vault'=?, 'err'=?, storage_name=COALESCE(?, storage_name), blob_path=COALESCE(?, blob_path) where task_id=?",
                     (type, status, vault, error, storage_name, blob_path, task_id), login=login):
                 log.error("Unable to update jobs database")
         else:

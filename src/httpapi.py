@@ -751,7 +751,6 @@ class BackupV2Status(Resource):
 
         saved_storage = row.get("storage_name", "")
         saved_blob = row.get("blob_path")
-        saved_blob = saved_blob or blob_path
 
         stats, stats_code = backupExecutor.get_backup_stats(backup_id, proc_type, None, backup_path=blob_path)
         if stats_code == 200 and isinstance(stats, dict):
