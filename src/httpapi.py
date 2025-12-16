@@ -747,7 +747,7 @@ class BackupV2Status(Resource):
 
         creation_time = _time_now()
         dbs = []
-        stats, stats_code = backupExecutor.get_backup_stats(backup_id, proc_type, None, blob_path=blob_path)
+        stats, stats_code = backupExecutor.get_backup_stats(backup_id, proc_type, None, backup_path=blob_path)
         if stats_code == 200 and isinstance(stats, dict):
             try:
                 creation_time = _time_from_ts_ms(int(stats.get("ts")))
