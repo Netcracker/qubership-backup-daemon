@@ -571,10 +571,11 @@ class BackupProcessor:
     # main routine
     def __do_process(self, **kwargs):
         action = kwargs['action']
+        blob_path = kwargs.get("blob_path") or (kwargs.get("custom_variables") or {}).get("blobPath")
         if BackupProcessor.__is_backup_action(action):
             self.__perform_backup(kwargs['task_id'], kwargs['allow_eviction'],
                                   kwargs['dbs'], kwargs['custom_variables'], kwargs['sharded'], kwargs['external'],
-                                  kwargs['vault_name'], kwargs['vault_path'], kwargs['blobPath'])
+                                  kwargs['vault_name'], kwargs['vault_path'], blob_path=blob_path)
             self.perform_evictions()
         elif BackupProcessor.__is_restore_action(action):
             self.__perform_restore(kwargs["task_id"], kwargs['vault_name'], kwargs['custom_variables'],

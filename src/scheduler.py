@@ -97,6 +97,7 @@ class Scheduler(Thread):
                 callback_args['task_id'] = queue_item['task_id']
                 callback_args['external'] = queue_item['external']
                 callback_args['vault_path'] = queue_item['vault_path']
+                callback_args['blob_path'] = queue_item.get('blob_path')
                 callback_args['allow_eviction'] = queue_item['allow_eviction']
                 callback_args['sharded'] = queue_item['sharded']
                 callback_args['dbmap'] = queue_item['dbmap']
