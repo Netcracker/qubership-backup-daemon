@@ -760,7 +760,7 @@ class BackupV2Status(Resource):
                 pass
             try:
                 processor = backupExecutor.get_processor(proc_type)
-                dbs = processor._BackupProcessor__get_backup_dbs(backup_id, vault_path=blob_path)
+                dbs = processor._BackupProcessor__get_backup_dbs(backup_id, blob_path=blob_path)
             except Exception:
                 dbs = []
 

@@ -265,10 +265,10 @@ class BackupProcessor:
 
         return message, code
 
-    def __get_backup_dbs(self, vault_name, vault_path=None):
+    def __get_backup_dbs(self, vault_name, vault_path=None, blob_path=None):
         log.debug("Getting dbs backed inside vault \"%s\"" % vault_name)
         vault_obj = self.storage.get_vault(
-            vault_name, external=vault_path is not None, vault_path=vault_path)
+            vault_name, external=vault_path is not None, vault_path=vault_path, blob_path=blob_path)
         if not vault_obj:
             raise BackupProcessException("No such vault: %s" % vault_name)
         cmd_processed = self.__process_cmd(self.db_list_cmd, vault_obj.folder)
