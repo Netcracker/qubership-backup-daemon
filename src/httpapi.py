@@ -67,10 +67,10 @@ log.addHandler(file_handler)
 backupExecutor = None
 auth = HTTPBasicAuth()
 
-def _rfc3339_now() -> str:
+def _time_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
-def _rfc3339_from_ts_ms(ts_ms: int) -> str:
+def _time_from_ts_ms(ts_ms: int) -> str:
     return datetime.fromtimestamp(ts_ms / 1000.0, tz=timezone.utc).isoformat().replace("+00:00", "Z")
 
 def _map_job_status_to_v2(status: str) -> str:
@@ -690,49 +690,42 @@ class BackupV2(Resource):
     @auth.login_required
     @api.doc(responses={200: "OK", 400: "Bad Request", 500: "Internal Server Error"})
     def post(self):
-        payload = request.get_json(silent=True) or {}
+        req_helper = RequestHelper(request)
 
-        storage_name = payload.get("storageName", "")
-        blob_path = payload.get("blobPath")
-        databases = payload.get("databases", [])
-
-        if not blob_path or not isinstance(blob_path, str):
-            return Response(response="blobPath must be a non-empty string", status=400)
-        if not isinstance(databases, list) or any(not isinstance(x, str) for x in databases):
-            return Response(response="databases must be a list of strings", status=400)
-
-        normalized_blob = blob_path.lstrip('/')
-        custom_variables = {k: v for k, v in configuration.config.custom_vars.items() if v}
+        storage_name = req_helper.get_storage_name()
+        blob_path = req_helper.get_blob_path()
+        databases = req_helper.get_db_names()
+        custom_variables = req_helper.get_custom_vars()
+        
         custom_variables["storageName"] = storage_name
-        custom_variables["prefix"] = blob_path
+        custom_variables["blob_path"] = blob_path
 
         proc_type = RequestHelper(request).get_proc_type()
-        backup_prefix_param = {"prefix": normalized_blob, "allow": True}
 
         backup_id = backupExecutor.enqueue_backup(
-            reason="http v2",
+            reason="api v2",
             custom_variables=custom_variables,
             allow_eviction=True,
             dbs=databases,
             proc_type=proc_type,
             sharded=False,
             backup_path=None,
-            backup_prefix=backup_prefix_param,
+            backup_prefix=None,
+            blob_path=blob_path
         )
 
         resp = {
             "status": "notStarted",
             "backupId": backup_id,
-            "creationTime": _rfc3339_now(),
+            "creationTime": _time_now(),
             "storageName": storage_name,
-            "blobPath": normalized_blob,
+            "blobPath": blob_path,
             "databases": _mk_db_list(databases, "notStarted"),
         }
         return Response(response=json.dumps(resp), status=200, mimetype="application/json")
 
 
 @api.route('/api/v2/backup/<string:backup_id>')
-@api.doc(description="Adapter-style API. Requires ?blobPath=<path> to locate backup.")
 class BackupV2Status(Resource):
     @auth.login_required
     @api.doc(responses={200: "OK", 400: "Bad Request", 404: "Not Found", 500: "Internal Server Error"})
@@ -750,15 +743,14 @@ class BackupV2Status(Resource):
             return Response(response=json.dumps(job_msg), status=404, mimetype="application/json")
 
         overall = _map_job_status_to_v2(job_msg.get("status"))
-        custom_variables = {k: v for k, v in configuration.config.custom_vars.items() if v}
 
 
-        creation_time = _rfc3339_now()
+        creation_time = _time_now()
         dbs = []
-        stats, stats_code = backupExecutor.get_backup_stats(backup_id, proc_type, None, blob_path)
+        stats, stats_code = backupExecutor.get_backup_stats(backup_id, proc_type, None, blob_path=blob_path)
         if stats_code == 200 and isinstance(stats, dict):
             try:
-                creation_time = _rfc3339_from_ts_ms(int(stats.get("ts")))
+                creation_time = _time_from_ts_ms(int(stats.get("ts")))
             except Exception:
                 pass
             try:
@@ -767,12 +759,18 @@ class BackupV2Status(Resource):
             except Exception:
                 dbs = []
 
+        processor = backupExecutor.get_processor(proc_type)
+        row = (processor.db.select_everything(backup_id) or [{}])[0]
+
+        saved_storage = row.get("storage_name", "")
+        saved_blob = row.get("blob_path")
+
         resp = {
             "status": overall,
             "backupId": backup_id,
             "creationTime": creation_time,
-            "storageName": custom_variables["storageName"],
-            "blobPath": blob_path,
+            "storageName": saved_storage,
+            "blobPath": saved_blob,
             "databases": _mk_db_list(dbs, overall),
         }
         return Response(response=json.dumps(resp), status=200, mimetype="application/json")

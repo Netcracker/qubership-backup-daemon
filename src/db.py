@@ -57,6 +57,8 @@ class DB:
             )
         """ % self.__tableName
         self.__create_table(jobs_table_query)
+        self.__add_column_if_missing("storage_name", "text")
+        self.__add_column_if_missing("blob_path", "text")
 
     @staticmethod
     def __create_connection(db_file):
@@ -103,7 +105,7 @@ class DB:
             log.exception("Database Error: %s" % err)
             return None
 
-    def update_job(self, task_id, type, status, vault, error, login=False):
+    def update_job(self, task_id, type, status, vault, error, storage_name=None, blob_path=None, login=False):
         # this is required as java json convertion fails for None value of error
         if error is None:
             error = ''
@@ -113,12 +115,12 @@ class DB:
             raise DbException(error_message)
         if self.__select("SELECT * FROM %s WHERE task_id = ?" % self.__tableName, (task_id,), login=login):
             if not self.__insert_or_delete(
-                    "UPDATE " + self.__tableName + " SET 'type'=?, 'status'=?, 'vault'=?, 'err'=? where task_id=?",
-                    (type, status, vault, error, task_id), login=login):
+                    "UPDATE " + self.__tableName + " SET 'type'=?, 'status'=?, 'vault'=?, 'err'=?, storage_name=?, blob_path=? where task_id=?",
+                    (type, status, vault, error, storage_name, blob_path, task_id), login=login):
                 log.error("Unable to update jobs database")
         else:
-            if not self.__insert_or_delete("INSERT INTO " + self.__tableName + " VALUES(?, ?, ?, ?, ?)",
-                                           (task_id, type, status, vault, error), login=login):
+            if not self.__insert_or_delete("INSERT INTO " + self.__tableName + " VALUES(?, ?, ?, ?, ?, ?, ?)",
+                                           (task_id, type, status, vault, error, storage_name, blob_path), login=login):
                 log.error("Unable to insert to jobs database")
 
     def rm_vault_from_base(self, vault, login=False):
@@ -142,3 +144,9 @@ class DB:
 
     def select_everything(self, task_id, login=False):
         return self.__select("SELECT * FROM %s WHERE task_id = ?" % self.__tableName, (task_id,), login=login)
+    
+    def __add_column_if_missing(self, name, col_type):
+        try:
+            self.__cursor.execute(f"ALTER TABLE {self.__tableName} ADD COLUMN {name} {col_type}")
+        except apsw.Error:
+            pass

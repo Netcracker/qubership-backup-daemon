@@ -328,7 +328,7 @@ class Storage(object):
     def get_nonevictable_vaults(self):
         return [vault for vault in self.list() if vault.is_nonevictable()]
 
-    def get_vault(self, vault_name, external=False, vault_path=None, skip_fs_check=False):
+    def get_vault(self, vault_name, external=False, vault_path=None, blob_path=None, skip_fs_check=False):
         self.__log.debug("Get vault name = %s external = %s" % (vault_name, external))
         self.__log.debug("vault path = %s " % vault_path)
         try:
@@ -338,8 +338,14 @@ class Storage(object):
                 if self.file_system.exists(self.root):
                     if self.file_system.exists(self.root + "/" + vault_name):
                         return Vault(self.root + "/" + vault_name, file_system=self.file_system)
-                    elif self.file_system.exists(self.granular_folder + "/" + vault_name):
+                    
+                    if blob_path and self.file_system.exists(self.granular_folder + "/" + blob_path.strip("/") + "/" + vault_name):
+                        return Vault(self.granular_folder + "/" + blob_path.strip("/") + "/" + vault_name,
+                                    file_system=self.file_system)
+                    
+                    if self.file_system.exists(self.granular_folder + "/" + vault_name):
                         return Vault(self.granular_folder + "/" + vault_name, file_system=self.file_system)
+                    
             elif vault_path is not None:
                 self.__log.debug("Get vault external")
                 if self.file_system.exists(self.external_root):
@@ -422,8 +428,8 @@ class Storage(object):
         return fsutil.get_fs_space(self.root)
 
     def open_vault(self, vault_name=None, allow_eviction=True, is_granular=False, is_sharded=False,
-                   is_external=False, vault_path=None, backup_prefix=None):
-        vault = self.get_vault(vault_name, is_external, vault_path)
+                   is_external=False, vault_path=None, backup_prefix=None, blob_path=None):
+        vault = self.get_vault(vault_name, is_external, vault_path, blob_path=blob_path)
         self.__log.info(vault)
         if vault is not None:
             return vault
@@ -432,6 +438,8 @@ class Storage(object):
             if is_granular:
                 self.__log.debug("Creating granular vault: %s" % vault_name)
                 folder = self.granular_folder
+                if blob_path:
+                    folder = folder + "/" + blob_path.strip("/")
             else:
                 self.__log.debug("Creating full vault: %s" % vault_name)
                 if not is_external:

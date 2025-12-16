@@ -114,13 +114,18 @@ class BackupProcessor:
         except Exception as e:
             log.error(f"Can't terminate pid {pid}, {e}")
 
-    def enqueue_backup(self, reason, custom_variables, allow_eviction=True, dbs=None, sharded=False, backup_path=None, backup_prefix=None):
+    def enqueue_backup(self, reason, custom_variables, allow_eviction=True, dbs=None, sharded=False, backup_path=None, backup_prefix=None, blob_path=None):
         if dbs:
             is_granular = True
         else:
             is_granular = False
         action = self.get_backup_action()
-        if backup_path is None:
+
+        if blob_path:
+            vault = self.storage.open_vault(allow_eviction=allow_eviction,
+                                            is_granular=is_granular,
+                                            is_sharded=sharded, is_external=False, blob_path=blob_path)
+        elif backup_path is None:
             vault = self.storage.open_vault(vault_name=backup_path, allow_eviction=allow_eviction,
                                             is_granular=is_granular,
                                             is_sharded=sharded, is_external=False, vault_path=backup_path, backup_prefix=backup_prefix)
@@ -130,12 +135,13 @@ class BackupProcessor:
                                             is_sharded=sharded, is_external=True, vault_path=backup_path)
         vault_name = vault.get_name()
         backup_id = vault.get_name()
+        cv = custom_variables or {}
 
-        self.db.update_job(backup_id, action, "Queued", None, None)
+        self.db.update_job(backup_id, action, "Queued", None, None, storage_name=cv.get("storageName"), blob_path=cv.get("blob_path"))
         self.scheduler.enqueue_execution(reason=reason, action=action, allow_eviction=allow_eviction,
                                          dbs=dbs, vault_name=vault_name, task_id=backup_id,
                                          custom_variables=custom_variables, sharded=sharded,
-                                         external=backup_path is not None, vault_path=backup_path)
+                                         external=backup_path is not None, vault_path=(backup_path or blob_path))
         # sleep for 2 secs to prevent conflicts in DB
         time.sleep(2)
         return backup_id
@@ -589,7 +595,7 @@ class BackupExecutor:
         else:
             return self.backup_processor
 
-    def enqueue_backup(self, reason, custom_variables, allow_eviction=True, dbs=None, proc_type=FULL, sharded=False, backup_path=None, backup_prefix=None):
+    def enqueue_backup(self, reason, custom_variables, allow_eviction=True, dbs=None, proc_type=FULL, sharded=False, backup_path=None, backup_prefix=None, blob_path=None):
         processor = self.get_processor(proc_type)
         dir_type = None
         if dbs and backup_path is None:
@@ -619,7 +625,7 @@ class BackupExecutor:
                     "Existing backups not found. Previous full or incremental backups must exist"
                     " before doing incremental backup")
 
-        return processor.enqueue_backup(reason, custom_variables, allow_eviction, dbs, sharded, backup_path, backup_prefix)
+        return processor.enqueue_backup(reason, custom_variables, allow_eviction, dbs, sharded, backup_path, backup_prefix, blob_path)
 
     def enqueue_eviction(self, proc_type=FULL):
         processor = self.get_processor(proc_type)

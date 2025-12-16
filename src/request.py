@@ -87,6 +87,33 @@ class RequestHelper:
         if 'prefix' in content:
             return content['prefix']
         return None
+    
+    def get_storage_name(self):
+        content = self.__content
+        return content.get('storageName', "")
+    
+    def get_blob_path(self):
+        content = self.__content
+        blob_path = content.get('blobPath')
+        if blob_path is None:
+            return None
+        if not isinstance(blob_path, str):
+            raise ApiException('blobPath must be a string', 400)
+        return blob_path.strip('"').lstrip('/')
+    
+    def get_db_names(self):
+        dbs = self.get_backup_dbs()
+        if not dbs:
+            return []
+        names = []
+        for item in dbs:
+            if isinstance(item, str):
+                names.append(item)
+            elif isinstance(item, dict) and item:
+                names.append(next(iter(item.keys())))
+            else:
+                raise ApiException("Unsupported db item format: %s" % item, 400)
+        return names
 
     def get_external(self):
         content = self.__content
