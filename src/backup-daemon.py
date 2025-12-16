@@ -192,7 +192,7 @@ class BackupProcessor:
     def exec_error_msg(cmd, code):
         return "Execution of '%s' was finished with non zero exit code: %d" % (cmd, code)
 
-    def get_backup_stats(self, vault_name=None, ts=None, backup_path=None):
+    def get_backup_stats(self, vault_name=None, ts=None, backup_path=None, blob_path=None):
         result = {}
         _storage = self.storage
         name = vault_name
@@ -200,8 +200,13 @@ class BackupProcessor:
         if backup_path is not None:
             type = 'full'
         if name is not None:
-            if name not in _storage.list(timestamps_only=True, type=type, storage_path=backup_path):
-                return "backup %s not found" % name, 404
+            if blob_path:
+                 vault_obj = _storage.get_vault(name, external=False, blob_path=blob_path)
+                 if not vault_obj:
+                     return "backup %s not found" % name, 404
+            else:
+                if name not in _storage.list(timestamps_only=True, type=type, storage_path=backup_path):
+                    return "backup %s not found" % name, 404
         else:
             if ts is not None:
                 name = _storage.find_by_ts(ts)
@@ -209,12 +214,12 @@ class BackupProcessor:
                     return "backup with ts %s or newer not found" % ts, 404
             else:
                 return "backup name or ts not found", 404
-        vault_obj = _storage.get_vault(
-            name, external=backup_path is not None, vault_path=backup_path)
+        if not blob_path:
+            vault_obj = _storage.get_vault(name, external=backup_path is not None, vault_path=backup_path)
         result['is_granular'] = vault_obj.is_granular()
         if vault_obj.is_granular():
             db_list = self.__get_backup_dbs(
-                name, vault_path=backup_path)
+                name, vault_path=backup_path, blob_path=blob_path)
         else:
             db_list = "%s backup" % self.proc_type
 
@@ -571,11 +576,10 @@ class BackupProcessor:
     # main routine
     def __do_process(self, **kwargs):
         action = kwargs['action']
-        blob_path = kwargs.get("blob_path") or (kwargs.get("custom_variables") or {}).get("blobPath")
         if BackupProcessor.__is_backup_action(action):
             self.__perform_backup(kwargs['task_id'], kwargs['allow_eviction'],
                                   kwargs['dbs'], kwargs['custom_variables'], kwargs['sharded'], kwargs['external'],
-                                  kwargs['vault_name'], kwargs['vault_path'], blob_path=blob_path)
+                                  kwargs['vault_name'], kwargs['vault_path'], kwargs['blob_path'])
             self.perform_evictions()
         elif BackupProcessor.__is_restore_action(action):
             self.__perform_restore(kwargs["task_id"], kwargs['vault_name'], kwargs['custom_variables'],
@@ -642,9 +646,9 @@ class BackupExecutor:
         processor = self.get_processor(proc_type)
         return processor.get_job_status(task_id)
 
-    def get_backup_stats(self, vault_name=None, proc_type=FULL, ts=None, backup_path=None):
+    def get_backup_stats(self, vault_name=None, proc_type=FULL, ts=None, backup_path=None, blob_path=None):
         processor = self.get_processor(proc_type)
-        return processor.get_backup_stats(vault_name, ts, backup_path)
+        return processor.get_backup_stats(vault_name, ts, backup_path, blob_path)
 
     def remove_backup(self, vault_name, proc_type=FULL):
         processor = self.get_processor(proc_type)
