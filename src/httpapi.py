@@ -774,3 +774,46 @@ class BackupV2Status(Resource):
             "databases": _mk_db_list(dbs, overall),
         }
         return Response(response=json.dumps(resp), status=200, mimetype="application/json")
+    
+    @auth.login_required
+    @api.doc(responses={200: "OK", 400: "Bad Request", 404: "Not Found", 409: "Conflict", 500: "Internal Server Error"})
+    def delete(self, backup_id: str):
+        blob_path = request.args.get("blobPath")
+        if not blob_path:
+            return Response(response="blobPath query param is required", status=400)
+        blob_path = blob_path.strip('"').lstrip('/')
+
+        proc_type = RequestHelper(request).get_proc_type()
+        processor = backupExecutor.get_processor(proc_type)
+
+        row = (processor.db.select_everything(backup_id, login=True) or [{}])[0]
+        saved_storage = row.get("storage_name", "")
+        saved_blob = row.get("blob_path") or blob_path
+
+        vault = processor.storage.get_vault(backup_id, blob_path=saved_blob)
+        if not vault:
+            return Response(response=f"backup {backup_id} not found", status=404)
+
+        if vault.is_locked():
+            return Response(response=f"backup {backup_id} is locked", status=409)
+        
+        processor.storage.evict(vault)
+
+        try:
+            if getattr(processor, "evict_cmd", None):
+                processor.execute_evict_cmd(vault)
+        except Exception:
+            log.exception("Failed to execute evict_cmd")
+
+        try:
+            processor.db.rm_vault_from_base(backup_id, login=True)
+        except Exception:
+            log.exception("Failed to cleanup jobs DB for %s", backup_id)
+
+        resp = {
+            "status": "deleted",
+            "backupId": backup_id,
+            "storageName": saved_storage,
+            "blobPath": saved_blob,
+        }
+        return Response(response=json.dumps(resp), status=200, mimetype="application/json")
