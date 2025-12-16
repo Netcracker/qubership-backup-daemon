@@ -697,10 +697,9 @@ class BackupV2(Resource):
         databases = req_helper.get_db_names()
         custom_variables = req_helper.get_custom_vars()
         proc_type = req_helper.get_proc_type()
-        
-        custom_variables["storageName"] = storage_name
-        custom_variables["blob_path"] = blob_path
 
+        custom_variables["storageName"] = storage_name
+        custom_variables["blobPath"] = blob_path
 
         backup_id = backupExecutor.enqueue_backup(
             reason="api v2",
@@ -747,6 +746,13 @@ class BackupV2Status(Resource):
 
         creation_time = _time_now()
         dbs = []
+        processor = backupExecutor.get_processor(proc_type)
+        row = (processor.db.select_everything(backup_id) or [{}])[0]
+
+        saved_storage = row.get("storage_name", "")
+        saved_blob = row.get("blob_path")
+        saved_blob = saved_blob or blob_path
+
         stats, stats_code = backupExecutor.get_backup_stats(backup_id, proc_type, None, backup_path=blob_path)
         if stats_code == 200 and isinstance(stats, dict):
             try:
@@ -759,11 +765,6 @@ class BackupV2Status(Resource):
             except Exception:
                 dbs = []
 
-        processor = backupExecutor.get_processor(proc_type)
-        row = (processor.db.select_everything(backup_id) or [{}])[0]
-
-        saved_storage = row.get("storage_name", "")
-        saved_blob = row.get("blob_path")
 
         resp = {
             "status": overall,

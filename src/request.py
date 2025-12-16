@@ -217,6 +217,9 @@ class RequestHelper:
         if "instances" in content:
             content['dbs'] = content['instances']
 
+        if "databases" in content:
+            content['dbs'] = content['databases']
+
         if "dbs" in content:
             for db in content['dbs']:
                 try:

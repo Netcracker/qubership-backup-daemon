@@ -53,12 +53,12 @@ class DB:
             type test NOT NULL,
             status text NOT NULL,
             vault text,
-            err text
+            err text,
+            blob_path text,
+            storage_name text
             )
         """ % self.__tableName
         self.__create_table(jobs_table_query)
-        self.__add_column_if_missing("storage_name", "text")
-        self.__add_column_if_missing("blob_path", "text")
 
     @staticmethod
     def __create_connection(db_file):
@@ -144,9 +144,3 @@ class DB:
 
     def select_everything(self, task_id, login=False):
         return self.__select("SELECT * FROM %s WHERE task_id = ?" % self.__tableName, (task_id,), login=login)
-    
-    def __add_column_if_missing(self, name, col_type):
-        try:
-            self.__cursor.execute(f"ALTER TABLE {self.__tableName} ADD COLUMN {name} {col_type}")
-        except apsw.Error:
-            pass
