@@ -125,7 +125,7 @@ class Scheduler(Thread):
                 self.__task_queue.task_done()
 
     def enqueue_execution(self, action, reason="manual call", allow_eviction=True, vault_name="", dbs=None, dbmap=None,
-                          task_id=None, custom_variables=None, sharded=False, external=False, vault_path=None):
+                          task_id=None, custom_variables=None, sharded=False, external=False, vault_path=None, blob_path=None):
         self.__log.info("Enqueue %s by: %s. Queue length: %d" %
                         (action, reason, self.__task_queue.qsize()))
         if not task_id:
@@ -143,6 +143,7 @@ class Scheduler(Thread):
                                "vault_name": vault_name,
                                "external": external,
                                "vault_path": vault_path,
+                               "blob_path": blob_path,
                                "dbs": dbs,
                                "dbmap": dbmap,
                                "custom_variables": custom_variables})

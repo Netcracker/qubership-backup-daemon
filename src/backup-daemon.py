@@ -141,7 +141,7 @@ class BackupProcessor:
         self.scheduler.enqueue_execution(reason=reason, action=action, allow_eviction=allow_eviction,
                                          dbs=dbs, vault_name=vault_name, task_id=backup_id,
                                          custom_variables=custom_variables, sharded=sharded,
-                                         external=backup_path is not None, vault_path=(backup_path or blob_path))
+                                         external=backup_path is not None, vault_path=backup_path, blob_path=blob_path)
         # sleep for 2 secs to prevent conflicts in DB
         time.sleep(2)
         return backup_id
@@ -269,6 +269,8 @@ class BackupProcessor:
         log.debug("Getting dbs backed inside vault \"%s\"" % vault_name)
         vault_obj = self.storage.get_vault(
             vault_name, external=vault_path is not None, vault_path=vault_path, blob_path=blob_path)
+        if self.storage.s3_enabled:
+            self.s3Client.download_folder(vault_obj.folder)
         if not vault_obj:
             raise BackupProcessException("No such vault: %s" % vault_name)
         cmd_processed = self.__process_cmd(self.db_list_cmd, vault_obj.folder)
@@ -279,7 +281,7 @@ class BackupProcessor:
         return [x for x in out if x.rstrip()]
 
     def __perform_backup(self, task_id, allow_eviction, dbs, custom_variables, sharded=False, external=False,
-                         vault_name=None, vault_path=None):
+                         vault_name=None, vault_path=None, blob_path=None):
         if dbs and not external:
             is_granular = True
         else:
@@ -292,7 +294,7 @@ class BackupProcessor:
 
         with self.storage.open_vault(vault_name=vault_name, allow_eviction=allow_eviction,
                                      is_granular=is_granular, is_sharded=sharded, is_external=external,
-                                     vault_path=vault_path) as (vault_folder, metrics, vault_object):
+                                     vault_path=vault_path, blob_path=blob_path) as (vault_folder, metrics, vault_object):
             if vault_object:
                 log.info("Start %s process to: %s" % (action, vault_folder))
                 self.db.update_job(task_id, action, "Processing", self.trim_storage_from_vault(vault_folder),
@@ -572,7 +574,7 @@ class BackupProcessor:
         if BackupProcessor.__is_backup_action(action):
             self.__perform_backup(kwargs['task_id'], kwargs['allow_eviction'],
                                   kwargs['dbs'], kwargs['custom_variables'], kwargs['sharded'], kwargs['external'],
-                                  kwargs['vault_name'], kwargs['vault_path'])
+                                  kwargs['vault_name'], kwargs['vault_path'], kwargs['blobPath'])
             self.perform_evictions()
         elif BackupProcessor.__is_restore_action(action):
             self.__perform_restore(kwargs["task_id"], kwargs['vault_name'], kwargs['custom_variables'],
