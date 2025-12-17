@@ -146,15 +146,17 @@ class BackupProcessor:
         time.sleep(2)
         return backup_id
 
-    def enqueue_restore(self, reason, vault_name, dbs, dbmap, custom_variables, backup_path=None):
+    def enqueue_restore(self, reason, vault_name, dbs, dbmap, custom_variables, backup_path=None, blob_path=None):
         action = self.get_restore_action()
         task_id = self.scheduler.generate_task_id()
-        self.db.update_job(task_id, action, "Queued", None, None)
+        cv = custom_variables or {}
+        self.db.update_job(task_id, action, "Queued", None, None, storage_name=cv.get("storageName"),
+            blob_path=cv.get("blobPath"))
         self.scheduler.enqueue_execution(reason=reason, action=action,
                                          vault_name=vault_name, dbs=dbs,
                                          dbmap=dbmap, task_id=task_id,
                                          custom_variables=custom_variables,
-                                         external=backup_path is not None, vault_path=backup_path)
+                                         external=backup_path is not None, vault_path=backup_path, blob_path=blob_path)
         # sleep for 2 secs to prevent conflicts in DB
         time.sleep(2)
         return task_id
@@ -353,10 +355,10 @@ class BackupProcessor:
             fsutil.rmtree(vault_object.folder)
 
     def __perform_restore(self, task_id, vault_folder, custom_variables, dbs=None, dbmap=None, external=False,
-                          vault_path=None):
+                          vault_path=None, blob_path=None):
         action = self.get_restore_action()
         vault_object = self.storage.get_vault(
-            vault_folder, external, vault_path)
+            vault_folder, external, vault_path, blob_path=blob_path)
         log.info("Starting %s process from: %s, vault obj: %s, %s"
                  % (action, vault_folder, vault_object, vault_object.get_path()))
 
@@ -364,7 +366,7 @@ class BackupProcessor:
             self.s3Client.download_folder(vault_object.folder)
 
         if dbs is not None:
-            backed_dbs = self.__get_backup_dbs(vault_folder, vault_path)
+            backed_dbs = self.__get_backup_dbs(vault_folder, vault_path, blob_path=blob_path)
             log.debug("Backed databases from %s: %s" %
                       (vault_folder, backed_dbs))
 
@@ -584,7 +586,7 @@ class BackupProcessor:
         elif BackupProcessor.__is_restore_action(action):
             self.__perform_restore(kwargs["task_id"], kwargs['vault_name'], kwargs['custom_variables'],
                                    dbs=kwargs['dbs'], dbmap=kwargs['dbmap'],
-                                   vault_path=kwargs['vault_path'], external=kwargs['external'])
+                                   vault_path=kwargs['vault_path'], external=kwargs['external'], blob_path=kwargs['blob_path'])
 
     # this will run anytime even if __do_process fails
     def __do_anyway(self, **kwargs):
@@ -638,9 +640,9 @@ class BackupExecutor:
         processor = self.get_processor(proc_type)
         processor.perform_evictions()
 
-    def enqueue_restore(self, reason, vault_name, dbs, dbmap, custom_variables, proc_type=FULL, backup_path=None):
+    def enqueue_restore(self, reason, vault_name, dbs, dbmap, custom_variables, proc_type=FULL, backup_path=None, blob_path=None):
         processor = self.get_processor(proc_type)
-        return processor.enqueue_restore(reason, vault_name, dbs, dbmap, custom_variables, backup_path)
+        return processor.enqueue_restore(reason, vault_name, dbs, dbmap, custom_variables, backup_path, blob_path)
 
     def get_job_status(self, task_id, proc_type=FULL):
         processor = self.get_processor(proc_type)

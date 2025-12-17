@@ -114,6 +114,53 @@ class RequestHelper:
             else:
                 raise ApiException("Unsupported db item format: %s" % item, 400)
         return names
+    
+    def get_restore_mappings_v2(self):
+        content = self.__content or {}
+
+        items = content.get("databases")
+        if items is None:
+            raise ApiException('"databases" is required', 400)
+        if not isinstance(items, list) or not items:
+            raise ApiException('"databases" must be a non-empty list', 400)
+
+        dbs = []
+        dbmap = {}
+
+        for it in items:
+            src = None
+            dst = None
+
+            if isinstance(it, str):
+                src = it
+
+            elif isinstance(it, dict):
+                if "databaseName" in it:
+                    src = it.get("databaseName")
+                    dst = (it.get("targetDatabaseName")
+                           or it.get("restoreDatabaseName")
+                           or it.get("newDatabaseName"))
+                elif len(it) == 1:
+                    src = next(iter(it.keys()))
+                else:
+                    raise ApiException(f"Unsupported database mapping item: {it}", 400)
+
+            else:
+                raise ApiException(f"Unsupported database mapping item type: {type(it)}", 400)
+
+            if not src or not safe_args.match(src):
+                raise ApiException(f"Wrong db name: '{src}', must match regex [0-9a-zA-Z-_]", 400)
+
+            if dst:
+                if not safe_args.match(dst):
+                    raise ApiException(f"Wrong target db name: '{dst}', must match regex [0-9a-zA-Z-_]", 400)
+                if dst != src:
+                    dbmap[src] = dst
+
+            dbs.append(src)
+
+        RequestHelper.validate_dbs(dbs)
+        return tuple(dbs), (dbmap if dbmap else None)
 
     def get_external(self):
         content = self.__content

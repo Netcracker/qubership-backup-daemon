@@ -817,3 +817,108 @@ class BackupV2Status(Resource):
             "blobPath": saved_blob,
         }
         return Response(response=json.dumps(resp), status=200, mimetype="application/json")
+    
+
+@api.route('/api/v2/restore/<string:backup_id>')
+class RestoreV2(Resource):
+    @auth.login_required
+    @api.doc(responses={200: "OK", 400: "Bad Request", 404: "Not Found", 500: "Internal Server Error"})
+    def post(self, backup_id: str):
+        req_helper = RequestHelper(request)
+
+        storage_name = req_helper.get_storage_name()
+        blob_path = req_helper.get_blob_path()   
+        dbs, dbmap = req_helper.get_restore_mappings_v2()
+        proc_type = req_helper.get_proc_type()
+
+        custom_variables = req_helper.get_custom_vars()
+        custom_variables["storageName"] = storage_name
+        custom_variables["blobPath"] = blob_path
+
+        restore_id = backupExecutor.enqueue_restore(
+            reason="api v2",
+            vault_name=backup_id, 
+            dbs=dbs,
+            dbmap=dbmap,
+            custom_variables=custom_variables,
+            proc_type=proc_type,
+            backup_path=None,
+            blob_path=blob_path,    
+        )
+
+        resp = {
+            "status": "notStarted",
+            "restoreId": restore_id,
+            "creationTime": _time_now(),
+            "storageName": storage_name,
+            "blobPath": blob_path,
+            "databases": _mk_db_list(list(dbs), "notStarted"),
+        }
+        return Response(response=json.dumps(resp), status=200, mimetype="application/json")
+    
+
+@api.route('/api/v2/restore/<string:backup_id>')
+class RestoreV2Status(Resource):
+    @auth.login_required
+    @api.doc(responses={200: "OK", 404: "Not Found", 500: "Internal Server Error"})
+    def get(self, backup_id: str):
+        req_helper = RequestHelper(request)
+        proc_type = req_helper.get_proc_type()
+
+        processor = backupExecutor.get_processor(proc_type)
+        restore_action = processor.get_restore_action()
+
+        rows = (processor.db.select_by_vault(backup_id, login=True) or [])
+        rows = [r for r in rows if r.get("type") == restore_action]
+        if not rows:
+            return Response(
+                response=json.dumps({"message": f"No restore jobs found for backup '{backup_id}'"}),
+                status=404,
+                mimetype="application/json",
+            )
+
+        rows.sort(key=lambda r: r.get("task_id", ""), reverse=True)
+        row = rows[0]
+
+        restore_id = row.get("task_id")
+        saved_storage = row.get("storage_name") or ""
+        saved_blob = row.get("blob_path") 
+
+        job_msg, job_code = backupExecutor.get_job_status(restore_id, proc_type)
+        if job_code == 404:
+            return Response(response=json.dumps(job_msg), status=404, mimetype="application/json")
+
+        overall = _map_job_status_to_v2(job_msg.get("status"))
+        error_message = job_msg.get("err") if overall == "failed" else None
+
+
+
+        completion_time = _time_now() if overall in ("completed", "failed") else None
+
+        dbs = []
+        try:
+            stats, stats_code = backupExecutor.get_backup_stats(
+                backup_id, proc_type, None, blob_path=saved_blob
+            )
+            if stats_code == 200 and isinstance(stats, dict) and isinstance(stats.get("db_list"), list):
+                dbs = stats["db_list"]
+        except Exception:
+            dbs = []
+
+        resp = {
+            "status": overall,
+            "errorMessage": error_message,
+            "restoreId": restore_id,
+            "completionTime": completion_time,
+            "storageName": saved_storage,
+            "blobPath": saved_blob,
+            "databases": [
+                {
+                    "previousDatabaseName": x,
+                    "databaseName": x,
+                    "status": overall,
+                } for x in dbs
+            ],
+        }
+        return Response(response=json.dumps(resp), status=200, mimetype="application/json")
+
