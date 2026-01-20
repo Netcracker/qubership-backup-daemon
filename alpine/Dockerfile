@@ -16,6 +16,7 @@ RUN set -x \
     && rm -rf /var/cache/apk/* \
     && apk add --no-cache curl sqlite sqlite-dev build-base ca-certificates \
     && wget \
+        --no-check-certificate \
         -nv \
         -O ${TMP_DIR}/apsw-${PY_APSW_VER}.zip \
         "https://github.com/rogerbinns/apsw/releases/download/${PY_APSW_VER}/apsw-${PY_APSW_VER}.zip" \
