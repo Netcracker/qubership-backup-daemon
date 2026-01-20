@@ -70,8 +70,7 @@ class DB:
     def __create_table(self, query):
         try:
             cursor = self.__conn.cursor()
-            with cursor:
-                cursor.execute(query)
+            cursor.execute(query)
         except apsw.Error as err:
             log.exception("Database Error: %s" % err)
             return 0
@@ -82,37 +81,37 @@ class DB:
             cursor.execute(sql, args)
 
     def __insert_or_delete(self, query, params, login=False):
+        conn = None
         try:
             if login:
                 conn = DB.__create_connection(self.__dbfile)
                 cursor = conn.cursor()
             else:
                 cursor = self.__conn.cursor()
-            with cursor:
-                self.__log_and_execute(cursor, query, params)
+            self.__log_and_execute(cursor, query, params)
             return 1
         except apsw.Error as err:
             log.exception("Database Error: %s" % err)
             return 0
         finally:
-            if login and 'conn' in locals():
+            if conn is not None:
                 conn.close()
 
     def __select(self, query, params, login=False):
+        conn = None
         try:
             if login:
                 conn = DB.__create_connection(self.__dbfile)
                 cursor = conn.cursor()
             else:
                 cursor = self.__conn.cursor()
-            with cursor:
-                self.__log_and_execute(cursor, query, params)
-                return cursor.fetchall()
+            self.__log_and_execute(cursor, query, params)
+            return cursor.fetchall()
         except apsw.Error as err:
             log.exception("Database Error: %s" % err)
             return None
         finally:
-            if login and 'conn' in locals():
+            if conn is not None:
                 conn.close()
 
     def update_job(self, task_id, type, status, vault, error, login=False):
