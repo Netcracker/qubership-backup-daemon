@@ -13,9 +13,8 @@ COPY requirements.txt ${BACKUP_DAEMON_HOME}/
 RUN set -x \
     && pip3 install --upgrade pip==${PIP} setuptools==${SETUPTOOLS} \
     && rm -rf /var/cache/apk/* \
-    && apk add --no-cache curl sqlite sqlite-dev build-base \
+    && apk add --no-cache curl sqlite sqlite-dev build-base ca-certificates \
     && wget \
-        --no-check-certificate \
         -nv \
         -O ${TMP_DIR}/apsw-${PY_APSW_VER}.zip \
         "https://github.com/rogerbinns/apsw/releases/download/${PY_APSW_VER}/apsw-${PY_APSW_VER}.zip" \
@@ -23,6 +22,8 @@ RUN set -x \
     && rm -rf ${TMP_DIR}/* \
     && pip3 install -r ${BACKUP_DAEMON_HOME}/requirements.txt \
     && apk del build-base
+
+RUN addgroup -S backup && adduser -S backup -G backup
 
 COPY src tests ${BACKUP_DAEMON_HOME}/
 RUN python3 -m unittest discover -s ${BACKUP_DAEMON_HOME} -p "*_tests.py"
@@ -33,7 +34,11 @@ RUN chmod +x /usr/bin/bdcli
 RUN chmod 777 /var/log
 
 RUN mkdir -p ${S3_CERT_PATH_INTERNAL} \
-    && chmod 777 ${S3_CERT_PATH_INTERNAL}
+    && chmod 770 ${S3_CERT_PATH_INTERNAL}
+
+RUN chown -R backup:backup ${BACKUP_DAEMON_HOME} ${S3_CERT_PATH_INTERNAL} /var/log
+
+USER backup
 
 VOLUME /backup-storage
 
