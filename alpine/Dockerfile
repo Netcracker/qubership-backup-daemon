@@ -10,7 +10,7 @@ ARG TMP_DIR="/tmp"
 
 COPY requirements.txt ${BACKUP_DAEMON_HOME}/
 
-# hadolint ignore=DL3018
+# hadolint ignore=DL3003,DL3018
 RUN set -x \
     && pip3 install --no-cache-dir --upgrade pip==${PIP} setuptools==${SETUPTOOLS} \
     && rm -rf /var/cache/apk/* \
@@ -20,7 +20,8 @@ RUN set -x \
         -O ${TMP_DIR}/apsw-${PY_APSW_VER}.zip \
         "https://github.com/rogerbinns/apsw/releases/download/${PY_APSW_VER}/apsw-${PY_APSW_VER}.zip" \
     && unzip ${TMP_DIR}/apsw-${PY_APSW_VER}.zip -d ${TMP_DIR} \
-    && python ${TMP_DIR}/apsw-${PY_APSW_VER}/setup.py install \
+    && cd ${TMP_DIR}/apsw-${PY_APSW_VER} \
+    && python setup.py install \
     && rm -rf "${TMP_DIR:?}/"* \
     && pip3 install --no-cache-dir -r ${BACKUP_DAEMON_HOME}/requirements.txt \
     && apk del build-base
