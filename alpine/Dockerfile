@@ -23,7 +23,7 @@ RUN set -x \
     && unzip ${TMP_DIR}/apsw-${PY_APSW_VER}.zip -d ${TMP_DIR} \
     && cd ${TMP_DIR}/apsw-${PY_APSW_VER} \
     && python setup.py install \
-    && rm -rf "${TMP_DIR:?}/"* \
+    && rm -rf "/tmp/"* \
     && pip3 install --no-cache-dir -r ${BACKUP_DAEMON_HOME}/requirements.txt \
     && apk del build-base
 
