@@ -5,7 +5,7 @@ attrs==21.4.0
 boto3==1.34.63
 botocore==1.34.63
 CacheControl==0.12.10
-certifi==2023.07.22
+certifi==2024.7.4
 charset-normalizer==2.0.7
 click==8.0.3
 colorama==0.4.4
@@ -19,7 +19,7 @@ flask-restx==1.1.0
 html5lib==1.1
 idna==3.7
 itsdangerous==2.0.1
-Jinja2==3.0.3
+Jinja2==3.1.6
 jmespath==0.10.0
 jsonschema==4.4.0
 lockfile==0.12.2
@@ -37,7 +37,7 @@ pyrsistent==0.18.1
 python-dateutil==2.8.2
 pytz==2021.3
 PyYAML==6.0.1
-requests==2.31.0
+requests==2.31.2
 retrying==1.3.3
 s3transfer==0.10.0
 six==1.16.0
