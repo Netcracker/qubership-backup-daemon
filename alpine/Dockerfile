@@ -19,7 +19,8 @@ RUN set -x \
         -nv \
         -O ${TMP_DIR}/apsw-${PY_APSW_VER}.zip \
         "https://github.com/rogerbinns/apsw/releases/download/${PY_APSW_VER}/apsw-${PY_APSW_VER}.zip" \
-    && unzip ${TMP_DIR}/apsw-${PY_APSW_VER}.zip && python ${TMP_DIR}/apsw-${PY_APSW_VER}/setup.py install \
+    && unzip ${TMP_DIR}/apsw-${PY_APSW_VER}.zip -d ${TMP_DIR} \
+    && python ${TMP_DIR}/apsw-${PY_APSW_VER}/setup.py install \
     && rm -rf "${TMP_DIR:?}/"* \
     && pip3 install --no-cache-dir -r ${BACKUP_DAEMON_HOME}/requirements.txt \
     && apk del build-base
