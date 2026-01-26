@@ -30,8 +30,6 @@ class DbException(Exception):
 
 
 class DB:
-    _lock = threading.Lock()
-    
     def __init__(self, dbfile):
         """
         Create a connection to sqlite database
@@ -42,6 +40,7 @@ class DB:
         :__tableName: table name for jobs
         """
         self.__dbfile = dbfile
+        self._lock = threading.Lock()
         try:
             log.debug("Database file: %s" % self.__dbfile)
             self.__conn = DB.__create_connection(dbfile)
@@ -71,43 +70,49 @@ class DB:
     def __create_table(self, query):
         try:
             cursor = self.__conn.cursor()
-            with cursor:
-                cursor.execute(query)
+            cursor.execute(query)
         except apsw.Error as err:
             log.exception("Database Error: %s" % err)
             return 0
 
-    @staticmethod
-    def __log_and_execute(cursor, sql, args):
-        with DB._lock:
+    def __log_and_execute(self, cursor, sql, args):
+        with self._lock:
             log.debug("SQL command: " + sql.replace('?', '%s') % args)
             cursor.execute(sql, args)
 
     def __insert_or_delete(self, query, params, login=False):
+        conn = None
         try:
             if login:
-                cursor = DB.__create_connection(self.__dbfile).cursor()
+                conn = DB.__create_connection(self.__dbfile)
+                cursor = conn.cursor()
             else:
                 cursor = self.__conn.cursor()
-            with cursor:
-                DB.__log_and_execute(cursor, query, params)
+            self.__log_and_execute(cursor, query, params)
             return 1
         except apsw.Error as err:
             log.exception("Database Error: %s" % err)
             return 0
+        finally:
+            if conn is not None:
+                conn.close()
 
     def __select(self, query, params, login=False):
+        conn = None
         try:
             if login:
-                cursor = DB.__create_connection(self.__dbfile).cursor()
+                conn = DB.__create_connection(self.__dbfile)
+                cursor = conn.cursor()
             else:
                 cursor = self.__conn.cursor()
-            with cursor:
-                DB.__log_and_execute(cursor, query, params)
-                return cursor.fetchall()
+            self.__log_and_execute(cursor, query, params)
+            return cursor.fetchall()
         except apsw.Error as err:
             log.exception("Database Error: %s" % err)
             return None
+        finally:
+            if conn is not None:
+                conn.close()
 
     def update_job(self, task_id, type, status, vault, error, login=False):
         # this is required as java json convertion fails for None value of error
