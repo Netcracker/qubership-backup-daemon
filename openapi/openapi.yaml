@@ -1,0 +1,1003 @@
+openapi: 3.0.3
+info:
+  title: BackupHttpApi
+  description: Qubership Backup Daemon HTTP API
+  version: "1.0"
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+security:
+  - basicAuth: []
+
+components:
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic
+
+  schemas:
+    VaultMetrics:
+      type: object
+      properties:
+        spent_time:
+          type: integer
+          description: Time spent on backup in milliseconds
+        size:
+          type: integer
+          description: Size of the backup in bytes
+        exit_code:
+          type: integer
+          description: Exit code of the backup command
+        exception:
+          type: string
+          description: Exception message if backup failed
+
+    VaultInfo:
+      type: object
+      required:
+        - id
+        - failed
+        - locked
+        - sharded
+        - canceled
+        - ts
+        - metrics
+      properties:
+        id:
+          type: string
+          description: Vault name / backup identifier
+        failed:
+          type: boolean
+        locked:
+          type: boolean
+        sharded:
+          type: boolean
+        canceled:
+          type: boolean
+        ts:
+          type: integer
+          format: int64
+          description: Creation timestamp (Unix epoch in milliseconds)
+        metrics:
+          $ref: "#/components/schemas/VaultMetrics"
+
+    BackupStats:
+      type: object
+      required:
+        - id
+        - failed
+        - locked
+        - sharded
+        - canceled
+        - ts
+        - is_granular
+        - db_list
+        - size
+        - spent_time
+        - valid
+        - evictable
+      properties:
+        id:
+          type: string
+        failed:
+          type: boolean
+        locked:
+          type: boolean
+        sharded:
+          type: boolean
+        canceled:
+          type: boolean
+        ts:
+          type: integer
+          format: int64
+          description: Creation timestamp (Unix epoch in milliseconds)
+        is_granular:
+          type: boolean
+        db_list:
+          description: List of databases or a string describing the backup type
+          oneOf:
+            - type: array
+              items:
+                type: string
+            - type: string
+        size:
+          type: string
+          description: "Size with suffix, e.g. '1024b' or 'Unknown'"
+        spent_time:
+          type: string
+          description: "Time with suffix, e.g. '500ms' or 'Unknown'"
+        exit_code:
+          type: integer
+        exception:
+          type: string
+        valid:
+          type: boolean
+        evictable:
+          type: boolean
+        custom_vars:
+          type: object
+          additionalProperties: true
+
+    StorageInfo:
+      type: object
+      required:
+        - dump_count
+      properties:
+        dump_count:
+          type: integer
+        size:
+          type: integer
+          description: Total storage size in bytes (not present when S3 is enabled)
+        free_space:
+          type: integer
+        total_space:
+          type: integer
+        free_inodes:
+          type: integer
+        total_inodes:
+          type: integer
+        used_inodes:
+          type: integer
+        lastSuccessful:
+          $ref: "#/components/schemas/VaultInfo"
+        last:
+          $ref: "#/components/schemas/VaultInfo"
+
+    HealthResponse:
+      type: object
+      required:
+        - status
+        - storage
+        - backup_queue_size
+      properties:
+        status:
+          type: string
+          enum:
+            - UP
+            - Warning
+        storage:
+          $ref: "#/components/schemas/StorageInfo"
+        backup_queue_size:
+          type: integer
+
+    ErrorResponse:
+      type: object
+      required:
+        - status
+        - message
+      properties:
+        status:
+          type: string
+          enum:
+            - Failed
+        message:
+          type: string
+
+    JobStatusResponse:
+      type: object
+      properties:
+        task_id:
+          type: string
+        type:
+          type: string
+        status:
+          type: string
+        vault:
+          type: string
+        err:
+          type: string
+
+    JobNotFoundResponse:
+      type: object
+      properties:
+        message:
+          type: string
+
+    BackupRequest:
+      type: object
+      properties:
+        dbs:
+          type: array
+          items:
+            oneOf:
+              - type: string
+              - type: object
+          description: List of databases to backup
+        args:
+          type: array
+          items:
+            type: string
+          description: "Alias for dbs (backward compat)"
+        allow_eviction:
+          type: string
+          description: "Whether to allow eviction. Truthy strings: true, True, 1, t, y, yes"
+        sharded:
+          type: boolean
+          default: false
+        externalBackupPath:
+          type: string
+          description: External backup storage path
+        prefix:
+          type: string
+          description: Backup name prefix
+
+    RestoreRequest:
+      type: object
+      properties:
+        vault:
+          type: string
+          description: Vault name to restore from
+        ts:
+          type: string
+          description: Timestamp to find a backup to restore
+        dbs:
+          type: array
+          items:
+            type: string
+          description: List of databases to restore
+        changeDbNames:
+          type: object
+          additionalProperties:
+            type: string
+          description: "Map of old_name -> new_name for database renaming"
+        externalBackupPath:
+          type: string
+
+    EvictionPolicyRequest:
+      type: object
+      required:
+        - fullEvictionPolicy
+      properties:
+        fullEvictionPolicy:
+          type: string
+          description: Eviction policy expression
+
+    UploadParams:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - full
+            - granular
+          default: full
+        allow_overwriting:
+          type: string
+          description: "Truthy strings: true, True, 1, t, y, yes"
+
+paths:
+  # ──────────────────────────────────────────────
+  # Health
+  # ──────────────────────────────────────────────
+  /health:
+    get:
+      operationId: getHealth
+      summary: Health status of backup daemon (full storage)
+      description: Status of backup daemon and metrics for full storage
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+        "500":
+          description: Internal Server Error
+
+  /health/{metrics_type}:
+    get:
+      operationId: getHealthMetrics
+      summary: Health metrics in specified format (full storage)
+      description: Status of backup daemon and metrics for full storage
+      security: []
+      parameters:
+        - name: metrics_type
+          in: path
+          required: true
+          schema:
+            type: string
+          description: "The type of metrics (e.g. 'prometheus')"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+            text/plain:
+              schema:
+                type: string
+                description: Prometheus metrics text
+        "500":
+          description: Internal Server Error
+
+  /incremental/health:
+    get:
+      operationId: getIncrementalHealth
+      summary: Health status of backup daemon (incremental storage)
+      description: Status of backup daemon and metrics for incremental storage
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+        "500":
+          description: Internal Server Error
+
+  /incremental/health/{metrics_type}:
+    get:
+      operationId: getIncrementalHealthMetrics
+      summary: Health metrics in specified format (incremental storage)
+      security: []
+      parameters:
+        - name: metrics_type
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+            text/plain:
+              schema:
+                type: string
+        "500":
+          description: Internal Server Error
+
+  # ──────────────────────────────────────────────
+  # Backup
+  # ──────────────────────────────────────────────
+  /backup:
+    post:
+      operationId: createBackup
+      summary: Run full manual backup
+      description: Run full manual backup. Returns backup ID (task_id).
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BackupRequest"
+      responses:
+        "200":
+          description: OK - returns backup ID as JSON string
+          content:
+            application/json:
+              schema:
+                type: string
+        "409":
+          description: Conflict - backup already in progress
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal Server Error
+
+  /incremental/backup:
+    post:
+      operationId: createIncrementalBackup
+      summary: Run incremental backup
+      description: Run incremental backup. Returns backup ID (task_id).
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BackupRequest"
+      responses:
+        "200":
+          description: OK - returns backup ID as JSON string
+          content:
+            application/json:
+              schema:
+                type: string
+        "409":
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal Server Error
+
+  # ──────────────────────────────────────────────
+  # Download backup
+  # ──────────────────────────────────────────────
+  /backup/{backup_id}:
+    get:
+      operationId: downloadBackup
+      summary: Download backup archive (full storage)
+      description: Download backup archive. Does not work with S3.
+      parameters:
+        - name: backup_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Backup ID
+      responses:
+        "200":
+          description: OK - returns zip archive stream
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+        "204":
+          description: No Content - backup not found
+
+  /incremental/backup/{backup_id}:
+    get:
+      operationId: downloadIncrementalBackup
+      summary: Download backup archive (incremental storage)
+      description: Download backup archive. Does not work with S3.
+      parameters:
+        - name: backup_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+        "204":
+          description: No Content
+
+  # ──────────────────────────────────────────────
+  # S3 Presigned URL
+  # ──────────────────────────────────────────────
+  /backup/s3/{backup_id}:
+    get:
+      operationId: getS3PresignedURL
+      summary: Generate pre-signed URL to share an S3 object
+      parameters:
+        - name: backup_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Backup ID
+        - name: expiration
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: URL expiration time in seconds
+      responses:
+        "200":
+          description: OK - returns list of presigned URLs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+        "204":
+          description: No Content - S3 disabled or backup not found
+
+  # ──────────────────────────────────────────────
+  # Restore
+  # ──────────────────────────────────────────────
+  /restore:
+    post:
+      operationId: createRestore
+      summary: Run recovery from full backup
+      description: Run recovery of data from full backup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RestoreRequest"
+      responses:
+        "200":
+          description: OK - returns task ID as JSON string
+          content:
+            application/json:
+              schema:
+                type: string
+        "404":
+          description: Not Found - vault or timestamp not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /incremental/restore:
+    post:
+      operationId: createIncrementalRestore
+      summary: Run recovery from incremental backup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RestoreRequest"
+      responses:
+        "200":
+          description: OK - returns task ID
+          content:
+            application/json:
+              schema:
+                type: string
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ──────────────────────────────────────────────
+  # External Restore
+  # ──────────────────────────────────────────────
+  /external/restore:
+    post:
+      operationId: createExternalRestore
+      summary: Run external restore of managed storage
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: OK - returns task ID
+          content:
+            application/json:
+              schema:
+                type: string
+        "500":
+          description: Internal Server Error
+
+  # ──────────────────────────────────────────────
+  # Upload backup
+  # ──────────────────────────────────────────────
+  /restore/backup:
+    post:
+      operationId: uploadBackup
+      summary: Upload backup archive
+      description: Upload backup archive. Does not work with S3.
+      parameters:
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - full
+              - granular
+            default: full
+        - name: allow_overwriting
+          in: query
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: "Backup archive (.zip or .tgz)"
+      responses:
+        "200":
+          description: OK
+        "500":
+          description: Internal Server Error
+
+  # ──────────────────────────────────────────────
+  # Job Status
+  # ──────────────────────────────────────────────
+  /jobstatus/{task_id}:
+    get:
+      operationId: getJobStatus
+      summary: Backup or recovery status (full storage)
+      parameters:
+        - name: task_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: ID of the task
+      responses:
+        "200":
+          description: Successful job
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobStatusResponse"
+        "206":
+          description: Job in progress
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobStatusResponse"
+        "404":
+          description: Job not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobNotFoundResponse"
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobNotFoundResponse"
+
+  /incremental/jobstatus/{task_id}:
+    get:
+      operationId: getIncrementalJobStatus
+      summary: Backup or recovery status (incremental storage)
+      parameters:
+        - name: task_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Successful job
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobStatusResponse"
+        "206":
+          description: Job in progress
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobStatusResponse"
+        "404":
+          description: Job not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobNotFoundResponse"
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobNotFoundResponse"
+
+  # ──────────────────────────────────────────────
+  # List Backups
+  # ──────────────────────────────────────────────
+  /listbackups:
+    get:
+      operationId: listBackups
+      summary: List all backup names (full storage)
+      responses:
+        "200":
+          description: OK - returns list of backup timestamp strings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+        "500":
+          description: Internal Server Error
+
+  /listbackups/{vault}:
+    get:
+      operationId: getBackupInfo
+      summary: Get particular backup information (full storage)
+      parameters:
+        - name: vault
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Backup ID
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BackupStats"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                type: string
+        "500":
+          description: Internal Server Error
+
+  /incremental/listbackups:
+    get:
+      operationId: listIncrementalBackups
+      summary: List all backup names (incremental storage)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+        "500":
+          description: Internal Server Error
+
+  /incremental/listbackups/{vault}:
+    get:
+      operationId: getIncrementalBackupInfo
+      summary: Get particular backup information (incremental storage)
+      parameters:
+        - name: vault
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BackupStats"
+        "404":
+          description: Not Found
+        "500":
+          description: Internal Server Error
+
+  # ──────────────────────────────────────────────
+  # Find
+  # ──────────────────────────────────────────────
+  /find:
+    get:
+      operationId: findBackup
+      summary: Find backup by timestamp (full storage)
+      description: Find the backup with timestamp equal or newer than specified. Requires JSON body in GET request.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - ts
+              properties:
+                ts:
+                  type: string
+                  description: Unix timestamp in milliseconds (as string)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BackupStats"
+        "404":
+          description: Not Found
+
+  /incremental/find:
+    get:
+      operationId: findIncrementalBackup
+      summary: Find backup by timestamp (incremental storage)
+      description: Find the backup with timestamp equal or newer than specified. Requires JSON body in GET request.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - ts
+              properties:
+                ts:
+                  type: string
+                  description: Unix timestamp in milliseconds (as string)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BackupStats"
+        "404":
+          description: Not Found
+
+  # ──────────────────────────────────────────────
+  # Evict
+  # ──────────────────────────────────────────────
+  /evict:
+    post:
+      operationId: startEviction
+      summary: Start eviction process (full storage)
+      description: Start eviction process for full storage
+      responses:
+        "200":
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: string
+        "500":
+          description: Internal Server Error
+
+  /evict/{vault}:
+    post:
+      operationId: removeBackup
+      summary: Remove specific backup (full storage)
+      parameters:
+        - name: vault
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Backup ID
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: string
+        "500":
+          description: Internal Server Error
+
+  /incremental/evict:
+    post:
+      operationId: startIncrementalEviction
+      summary: Start eviction process (incremental storage)
+      responses:
+        "200":
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: string
+        "500":
+          description: Internal Server Error
+
+  /incremental/evict/{vault}:
+    post:
+      operationId: removeIncrementalBackup
+      summary: Remove specific backup (incremental storage)
+      parameters:
+        - name: vault
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: string
+        "500":
+          description: Internal Server Error
+
+  # ──────────────────────────────────────────────
+  # Eviction Policy
+  # ──────────────────────────────────────────────
+  /evictionpolicy:
+    post:
+      operationId: updateEvictionPolicy
+      summary: Update eviction policy at runtime (full storage)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EvictionPolicyRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  /incremental/evictionpolicy:
+    post:
+      operationId: updateIncrementalEvictionPolicy
+      summary: Update eviction policy at runtime (incremental storage)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EvictionPolicyRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  # ──────────────────────────────────────────────
+  # Terminate
+  # ──────────────────────────────────────────────
+  /terminate/{backup_id}:
+    post:
+      operationId: terminateBackup
+      summary: Terminate running backup procedure
+      parameters:
+        - name: backup_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Backup ID
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                externalBackupPath:
+                  type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        "404":
+          description: Not Found - backup not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "406":
+          description: Not Acceptable - backup not locked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
