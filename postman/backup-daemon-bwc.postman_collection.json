@@ -1,0 +1,817 @@
+{
+  "info": {
+    "name": "Backup Daemon BWC Tests",
+    "description": "Backward compatibility tests for the Qubership Backup Daemon HTTP API.\nValidates response structure, status codes, and content types to ensure API contract stability during the Go rewrite.\nReference: current Python implementation is the source of truth.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "basic",
+    "basic": [
+      { "key": "username", "value": "{{username}}", "type": "string" },
+      { "key": "password", "value": "{{password}}", "type": "string" }
+    ]
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8080" },
+    { "key": "backup_id", "value": "" },
+    { "key": "task_id", "value": "" },
+    { "key": "poll_retries", "value": "0" }
+  ],
+  "item": [
+    {
+      "name": "BWC: GET /health",
+      "item": [
+        {
+          "name": "GET /health — returns health JSON for full storage",
+          "request": { "method": "GET", "url": "{{base_url}}/health", "auth": { "type": "noauth" } },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('BWC: GET /health returns HTTP 200', function () {",
+            "    pm.response.to.have.status(200);",
+            "});",
+            "pm.test('BWC: GET /health Content-Type is application/json', function () {",
+            "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');",
+            "});",
+            "pm.test('BWC: GET /health body has required field \"status\" (UP|Warning)', function () {",
+            "    var json = pm.response.json();",
+            "    pm.expect(json).to.have.property('status');",
+            "    pm.expect(json.status).to.be.oneOf(['UP', 'Warning']);",
+            "});",
+            "pm.test('BWC: GET /health body has required field \"storage\" with \"dump_count\"', function () {",
+            "    var s = pm.response.json().storage;",
+            "    pm.expect(s).to.be.an('object');",
+            "    pm.expect(s.dump_count).to.be.a('number');",
+            "});",
+            "pm.test('BWC: GET /health body has required field \"backup_queue_size\" (number)', function () {",
+            "    pm.expect(pm.response.json().backup_queue_size).to.be.a('number');",
+            "});",
+            "pm.test('BWC: GET /health storage has filesystem fields (non-S3 mode)', function () {",
+            "    var s = pm.response.json().storage;",
+            "    if (s.hasOwnProperty('size')) {",
+            "        pm.expect(s.size).to.be.a('number');",
+            "        pm.expect(s.free_space).to.be.a('number');",
+            "        pm.expect(s.total_space).to.be.a('number');",
+            "        pm.expect(s.free_inodes).to.be.a('number');",
+            "        pm.expect(s.total_inodes).to.be.a('number');",
+            "        pm.expect(s.used_inodes).to.be.a('number');",
+            "    }",
+            "});",
+            "pm.test('BWC: GET /health storage.lastSuccessful has VaultInfo schema when present', function () {",
+            "    var s = pm.response.json().storage;",
+            "    if (s.lastSuccessful) {",
+            "        var v = s.lastSuccessful;",
+            "        pm.expect(v.id).to.be.a('string');",
+            "        pm.expect(v.failed).to.be.a('boolean');",
+            "        pm.expect(v.locked).to.be.a('boolean');",
+            "        pm.expect(v.sharded).to.be.a('boolean');",
+            "        pm.expect(v.canceled).to.be.a('boolean');",
+            "        pm.expect(v.ts).to.be.a('number');",
+            "        pm.expect(v.metrics).to.be.an('object');",
+            "    }",
+            "});",
+            "pm.test('BWC: GET /health storage.last has VaultInfo schema when present', function () {",
+            "    var s = pm.response.json().storage;",
+            "    if (s.last) {",
+            "        var v = s.last;",
+            "        pm.expect(v.id).to.be.a('string');",
+            "        pm.expect(v.failed).to.be.a('boolean');",
+            "        pm.expect(v.locked).to.be.a('boolean');",
+            "        pm.expect(v.ts).to.be.a('number');",
+            "        pm.expect(v.metrics).to.be.an('object');",
+            "    }",
+            "});"
+          ] } }]
+        },
+        {
+          "name": "GET /health/prometheus — returns Prometheus text metrics",
+          "request": { "method": "GET", "url": "{{base_url}}/health/prometheus", "auth": { "type": "noauth" } },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('BWC: GET /health/prometheus returns HTTP 200', function () {",
+            "    pm.response.to.have.status(200);",
+            "});",
+            "pm.test('BWC: GET /health/prometheus body is non-empty text', function () {",
+            "    pm.expect(pm.response.text().length).to.be.above(0);",
+            "});",
+            "pm.test('BWC: GET /health/prometheus contains backup_daemon_status metric', function () {",
+            "    pm.expect(pm.response.text()).to.include('backup_daemon_status');",
+            "});",
+            "pm.test('BWC: GET /health/prometheus contains backup_storage_dump_count metric', function () {",
+            "    pm.expect(pm.response.text()).to.include('backup_storage_dump_count');",
+            "});"
+          ] } }]
+        },
+        {
+          "name": "GET /incremental/health — returns 500 when incremental is not configured",
+          "request": { "method": "GET", "url": "{{base_url}}/incremental/health", "auth": { "type": "noauth" } },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('BWC: GET /incremental/health returns HTTP 200 or 500', function () {",
+            "    pm.expect(pm.response.code).to.be.oneOf([200, 500]);",
+            "});",
+            "if (pm.response.code === 200) {",
+            "    pm.test('BWC: GET /incremental/health body has health structure', function () {",
+            "        var j = pm.response.json();",
+            "        pm.expect(j).to.have.property('status');",
+            "        pm.expect(j).to.have.property('storage');",
+            "        pm.expect(j).to.have.property('backup_queue_size');",
+            "    });",
+            "}"
+          ] } }]
+        }
+      ]
+    },
+    {
+      "name": "BWC: POST /backup",
+      "item": [
+        {
+          "name": "POST /backup — without body triggers full backup",
+          "request": { "method": "POST", "url": "{{base_url}}/backup" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('BWC: POST /backup (no body) returns HTTP 200', function () {",
+            "    pm.response.to.have.status(200);",
+            "});",
+            "pm.test('BWC: POST /backup (no body) Content-Type is application/json', function () {",
+            "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');",
+            "});",
+            "pm.test('BWC: POST /backup (no body) returns non-empty vault name as plain text', function () {",
+            "    var body = pm.response.text().trim();",
+            "    pm.expect(body.length).to.be.above(0);",
+            "    pm.collectionVariables.set('task_id', body);",
+            "});",
+            "pm.collectionVariables.set('poll_retries', '0');"
+          ] } }]
+        },
+        {
+          "name": "POST /backup — duplicate request returns 409 Conflict",
+          "request": { "method": "POST", "url": "{{base_url}}/backup" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('BWC: POST /backup duplicate returns HTTP 200 or 409', function () {",
+            "    pm.expect(pm.response.code).to.be.oneOf([200, 409]);",
+            "});",
+            "if (pm.response.code === 409) {",
+            "    pm.test('BWC: POST /backup 409 body has {status: \"Failed\", message: string}', function () {",
+            "        var j = pm.response.json();",
+            "        pm.expect(j.status).to.eql('Failed');",
+            "        pm.expect(j.message).to.be.a('string');",
+            "    });",
+            "}"
+          ] } }]
+        }
+      ]
+    },
+    {
+      "name": "BWC: GET /jobstatus",
+      "item": [
+        {
+          "name": "GET /jobstatus/:task_id — returns job status structure",
+          "request": { "method": "GET", "url": "{{base_url}}/jobstatus/{{task_id}}" },
+          "event": [
+            { "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
+              "if (!pm.collectionVariables.get('task_id')) pm.execution.skipRequest();"
+            ] } },
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('BWC: GET /jobstatus/:id returns HTTP 200 or 206', function () {",
+              "    pm.expect(pm.response.code).to.be.oneOf([200, 206]);",
+              "});",
+              "pm.test('BWC: GET /jobstatus/:id Content-Type is application/json', function () {",
+              "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');",
+              "});",
+              "pm.test('BWC: GET /jobstatus/:id body has field \"task_id\" (string)', function () {",
+              "    pm.expect(pm.response.json().task_id).to.be.a('string');",
+              "});",
+              "pm.test('BWC: GET /jobstatus/:id body has field \"type\" (string)', function () {",
+              "    pm.expect(pm.response.json().type).to.be.a('string');",
+              "});",
+              "pm.test('BWC: GET /jobstatus/:id body has field \"status\" (Successful|Queued|Processing|Failed)', function () {",
+              "    pm.expect(pm.response.json().status).to.be.oneOf(['Successful','Queued','Processing','Failed']);",
+              "});",
+              "pm.test('BWC: GET /jobstatus/:id body has field \"vault\"', function () {",
+              "    pm.expect(pm.response.json()).to.have.property('vault');",
+              "});",
+              "pm.test('BWC: GET /jobstatus/:id body has field \"err\"', function () {",
+              "    pm.expect(pm.response.json()).to.have.property('err');",
+              "});"
+            ] } }
+          ]
+        },
+        {
+          "name": "Poll /jobstatus until backup completes",
+          "request": { "method": "GET", "url": "{{base_url}}/jobstatus/{{task_id}}" },
+          "event": [
+            { "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
+              "if (!pm.collectionVariables.get('task_id')) pm.execution.skipRequest();"
+            ] } },
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "if (pm.response.code === 206) {",
+              "    var r = parseInt(pm.collectionVariables.get('poll_retries') || '0') + 1;",
+              "    pm.collectionVariables.set('poll_retries', r.toString());",
+              "    if (r < 120) { postman.setNextRequest('Poll /jobstatus until backup completes'); }",
+              "    else { pm.test('BWC: backup completed within timeout', function(){ pm.expect.fail('timeout after '+r+' polls'); }); }",
+              "} else {",
+              "    pm.collectionVariables.set('poll_retries', '0');",
+              "    pm.test('BWC: GET /jobstatus final status is HTTP 200 (Successful) or 500 (Failed)', function () {",
+              "        pm.expect(pm.response.code).to.be.oneOf([200, 500]);",
+              "    });",
+              "}"
+            ] } }
+          ]
+        },
+        {
+          "name": "GET /jobstatus/:unknown — returns 404 or 500 with error",
+          "request": { "method": "GET", "url": "{{base_url}}/jobstatus/unknown-task-99999" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('BWC: GET /jobstatus/unknown returns HTTP 404 or 500', function () {",
+            "    pm.expect(pm.response.code).to.be.oneOf([404, 500]);",
+            "});",
+            "pm.test('BWC: GET /jobstatus/unknown Content-Type is application/json', function () {",
+            "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');",
+            "});",
+            "pm.test('BWC: GET /jobstatus/unknown body has field \"message\" (string)', function () {",
+            "    pm.expect(pm.response.json().message).to.be.a('string');",
+            "});"
+          ] } }]
+        }
+      ]
+    },
+    {
+      "name": "BWC: GET /listbackups",
+      "item": [
+        {
+          "name": "GET /listbackups — returns JSON array of vault name strings",
+          "request": { "method": "GET", "url": "{{base_url}}/listbackups" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('BWC: GET /listbackups returns HTTP 200', function () {",
+            "    pm.response.to.have.status(200);",
+            "});",
+            "pm.test('BWC: GET /listbackups Content-Type is application/json', function () {",
+            "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');",
+            "});",
+            "pm.test('BWC: GET /listbackups body is a JSON array', function () {",
+            "    pm.expect(pm.response.json()).to.be.an('array');",
+            "});",
+            "pm.test('BWC: GET /listbackups array items are strings', function () {",
+            "    pm.response.json().forEach(function(i){ pm.expect(i).to.be.a('string'); });",
+            "});",
+            "var list = pm.response.json();",
+            "if (list.length > 0) { pm.collectionVariables.set('backup_id', list[list.length - 1]); }"
+          ] } }]
+        },
+        {
+          "name": "GET /listbackups/:vault — returns BackupStats object",
+          "request": { "method": "GET", "url": "{{base_url}}/listbackups/{{backup_id}}" },
+          "event": [
+            { "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
+              "if (!pm.collectionVariables.get('backup_id')) pm.execution.skipRequest();"
+            ] } },
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('BWC: GET /listbackups/:vault returns HTTP 200', function () { pm.response.to.have.status(200); });",
+              "pm.test('BWC: GET /listbackups/:vault Content-Type is application/json', function () {",
+              "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');",
+              "});",
+              "var j = pm.response.json();",
+              "pm.test('BWC: BackupStats has field \"id\" (string)',       function(){ pm.expect(j.id).to.be.a('string'); });",
+              "pm.test('BWC: BackupStats has field \"failed\" (boolean)',   function(){ pm.expect(j.failed).to.be.a('boolean'); });",
+              "pm.test('BWC: BackupStats has field \"locked\" (boolean)',   function(){ pm.expect(j.locked).to.be.a('boolean'); });",
+              "pm.test('BWC: BackupStats has field \"sharded\" (boolean)',  function(){ pm.expect(j.sharded).to.be.a('boolean'); });",
+              "pm.test('BWC: BackupStats has field \"canceled\" (boolean)', function(){ pm.expect(j.canceled).to.be.a('boolean'); });",
+              "pm.test('BWC: BackupStats has field \"ts\" (number, unix ms)', function(){ pm.expect(j.ts).to.be.a('number'); });",
+              "pm.test('BWC: BackupStats has field \"is_granular\" (boolean)', function(){ pm.expect(j.is_granular).to.be.a('boolean'); });",
+              "pm.test('BWC: BackupStats has field \"db_list\"',            function(){ pm.expect(j).to.have.property('db_list'); });",
+              "pm.test('BWC: BackupStats has field \"size\" (string, e.g. \"1024b\")', function(){ pm.expect(j.size).to.be.a('string'); });",
+              "pm.test('BWC: BackupStats has field \"spent_time\" (string, e.g. \"500ms\")', function(){ pm.expect(j.spent_time).to.be.a('string'); });",
+              "pm.test('BWC: BackupStats has field \"valid\" (boolean)',    function(){ pm.expect(j.valid).to.be.a('boolean'); });",
+              "pm.test('BWC: BackupStats has field \"evictable\" (boolean)', function(){ pm.expect(j.evictable).to.be.a('boolean'); });",
+              "pm.test('BWC: BackupStats has field \"exit_code\" (number)', function(){ pm.expect(j.exit_code).to.be.a('number'); });",
+              "if (j.hasOwnProperty('custom_vars')) {",
+              "    pm.test('BWC: BackupStats optional \"custom_vars\" is object', function(){ pm.expect(j.custom_vars).to.be.an('object'); });",
+              "}"
+            ] } }
+          ]
+        },
+        {
+          "name": "GET /listbackups/:nonexistent — returns 404",
+          "request": { "method": "GET", "url": "{{base_url}}/listbackups/nonexistent-vault-99999" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('BWC: GET /listbackups/nonexistent returns HTTP 404', function () {",
+            "    pm.response.to.have.status(404);",
+            "});",
+            "pm.test('BWC: GET /listbackups/nonexistent Content-Type is application/json', function () {",
+            "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');",
+            "});"
+          ] } }]
+        },
+        {
+          "name": "GET /incremental/listbackups — returns 200 or 500",
+          "request": { "method": "GET", "url": "{{base_url}}/incremental/listbackups" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('BWC: GET /incremental/listbackups returns HTTP 200 or 500', function () {",
+            "    pm.expect(pm.response.code).to.be.oneOf([200, 500]);",
+            "});",
+            "pm.test('BWC: GET /incremental/listbackups Content-Type is application/json', function () {",
+            "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');",
+            "});",
+            "if (pm.response.code === 200) {",
+            "    pm.test('BWC: GET /incremental/listbackups body is array', function(){ pm.expect(pm.response.json()).to.be.an('array'); });",
+            "}"
+          ] } }]
+        }
+      ]
+    },
+    {
+      "name": "BWC: POST /backup (variations)",
+      "item": [
+        {
+          "name": "POST /backup — with {\"dbs\": [\"db1\",\"db2\"]} (granular)",
+          "request": { "method": "POST", "url": "{{base_url}}/backup",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"dbs\":[\"db1\",\"db2\"]}" }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('BWC: POST /backup with dbs returns HTTP 200 or 409', function () {",
+            "    pm.expect(pm.response.code).to.be.oneOf([200, 409]);",
+            "});",
+            "pm.test('BWC: POST /backup with dbs Content-Type is application/json', function () {",
+            "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');",
+            "});",
+            "if (pm.response.code === 200) {",
+            "    pm.test('BWC: POST /backup with dbs returns vault name string', function () {",
+            "        pm.expect(pm.response.text().trim().length).to.be.above(0);",
+            "    });",
+            "}",
+            "if (pm.response.code === 409) {",
+            "    pm.test('BWC: POST /backup with dbs 409 has {status,message}', function () {",
+            "        var j = pm.response.json();",
+            "        pm.expect(j.status).to.eql('Failed');",
+            "        pm.expect(j.message).to.be.a('string');",
+            "    });",
+            "}"
+          ] } }]
+        },
+        {
+          "name": "POST /backup — with dbs containing collections",
+          "request": { "method": "POST", "url": "{{base_url}}/backup",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"dbs\":[\"db1\",{\"db2\":{\"collections\":[\"col1\",\"col2\"]}}]}" }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('BWC: POST /backup with dbs+collections returns HTTP 200 or 409', function () {",
+            "    pm.expect(pm.response.code).to.be.oneOf([200, 409]);",
+            "});",
+            "pm.test('BWC: POST /backup with dbs+collections Content-Type is application/json', function () {",
+            "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');",
+            "});"
+          ] } }]
+        },
+        {
+          "name": "POST /backup — with {\"allow_eviction\":\"False\"}",
+          "request": { "method": "POST", "url": "{{base_url}}/backup",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"allow_eviction\":\"False\"}" }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('BWC: POST /backup with allow_eviction=False returns HTTP 200 or 409', function () {",
+            "    pm.expect(pm.response.code).to.be.oneOf([200, 409]);",
+            "});",
+            "pm.test('BWC: POST /backup with allow_eviction=False Content-Type is application/json', function () {",
+            "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');",
+            "});"
+          ] } }]
+        },
+        {
+          "name": "POST /backup — with {\"sharded\": true}",
+          "request": { "method": "POST", "url": "{{base_url}}/backup",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"sharded\":true}" }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('BWC: POST /backup with sharded=true returns HTTP 200 or 409', function () {",
+            "    pm.expect(pm.response.code).to.be.oneOf([200, 409]);",
+            "});"
+          ] } }]
+        },
+        {
+          "name": "POST /backup — with custom variable {\"test\": \"myval\"}",
+          "request": { "method": "POST", "url": "{{base_url}}/backup",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"test\":\"myval\"}" }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('BWC: POST /backup with custom var returns HTTP 200 or 409', function () {",
+            "    pm.expect(pm.response.code).to.be.oneOf([200, 409]);",
+            "});"
+          ] } }]
+        },
+        {
+          "name": "POST /backup — with unknown key returns 500",
+          "request": { "method": "POST", "url": "{{base_url}}/backup",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"unknown_key_xyz\":\"value\"}" }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('BWC: POST /backup with unknown key returns HTTP 500', function () {",
+            "    pm.response.to.have.status(500);",
+            "});"
+          ] } }]
+        },
+        {
+          "name": "POST /incremental/backup — returns 200 or 409 or 500",
+          "request": { "method": "POST", "url": "{{base_url}}/incremental/backup" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('BWC: POST /incremental/backup returns HTTP 200, 409, or 500', function () {",
+            "    pm.expect(pm.response.code).to.be.oneOf([200, 409, 500]);",
+            "});",
+            "pm.test('BWC: POST /incremental/backup Content-Type is application/json', function () {",
+            "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');",
+            "});"
+          ] } }]
+        }
+      ]
+    },
+    {
+      "name": "BWC: GET /find",
+      "item": [
+        {
+          "name": "GET /find — via sendRequest (GET+body): ts=0 → 200, future ts → 404",
+          "request": { "method": "GET", "url": "{{base_url}}/health", "auth": { "type": "noauth" } },
+          "event": [
+            { "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
+              "var baseUrl = pm.variables.get('base_url');",
+              "pm.sendRequest({ url: baseUrl+'/find', method:'GET',",
+              "    header:{'Content-Type':'application/json'},",
+              "    body:{mode:'raw',raw:JSON.stringify({ts:'0'})}",
+              "}, function(err,res){",
+              "    pm.collectionVariables.set('find_ok_code', res.code);",
+              "    pm.collectionVariables.set('find_ok_body', res.text());",
+              "});",
+              "pm.sendRequest({ url: baseUrl+'/find', method:'GET',",
+              "    header:{'Content-Type':'application/json'},",
+              "    body:{mode:'raw',raw:JSON.stringify({ts:'99999999999999999'})}",
+              "}, function(err,res){",
+              "    pm.collectionVariables.set('find_nf_code', res.code);",
+              "});"
+            ] } },
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "var okCode = parseInt(pm.collectionVariables.get('find_ok_code'));",
+              "var okBody = pm.collectionVariables.get('find_ok_body');",
+              "var nfCode = parseInt(pm.collectionVariables.get('find_nf_code'));",
+              "",
+              "pm.test('BWC: GET /find with ts=0 returns HTTP 200', function(){ pm.expect(okCode).to.eql(200); });",
+              "pm.test('BWC: GET /find response has BackupStats fields', function(){",
+              "    var j = JSON.parse(okBody);",
+              "    pm.expect(j.id).to.be.a('string');",
+              "    pm.expect(j.failed).to.be.a('boolean');",
+              "    pm.expect(j.locked).to.be.a('boolean');",
+              "    pm.expect(j.ts).to.be.a('number');",
+              "    pm.expect(j.is_granular).to.be.a('boolean');",
+              "    pm.expect(j.valid).to.be.a('boolean');",
+              "    pm.expect(j.evictable).to.be.a('boolean');",
+              "    pm.expect(j.size).to.be.a('string');",
+              "    pm.expect(j.spent_time).to.be.a('string');",
+              "});",
+              "pm.test('BWC: GET /find with future ts returns HTTP 404', function(){ pm.expect(nfCode).to.eql(404); });"
+            ] } }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "BWC: POST /restore",
+      "item": [
+        {
+          "name": "POST /restore — with vault only (full restore)",
+          "request": { "method": "POST", "url": "{{base_url}}/restore",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "" }
+          },
+          "event": [
+            { "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
+              "var v = pm.collectionVariables.get('backup_id');",
+              "if (!v) { pm.execution.skipRequest(); return; }",
+              "pm.request.body.raw = JSON.stringify({vault: v});"
+            ] } },
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('BWC: POST /restore with vault returns HTTP 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test('BWC: POST /restore with vault Content-Type is application/json', function () {",
+              "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');",
+              "});",
+              "pm.test('BWC: POST /restore with vault returns non-empty task_id string', function () {",
+              "    pm.expect(pm.response.text().trim().length).to.be.above(0);",
+              "});"
+            ] } }
+          ]
+        },
+        {
+          "name": "POST /restore — with vault and dbs list",
+          "request": { "method": "POST", "url": "{{base_url}}/restore",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "" }
+          },
+          "event": [
+            { "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
+              "var v = pm.collectionVariables.get('backup_id');",
+              "if (!v) { pm.execution.skipRequest(); return; }",
+              "pm.request.body.raw = JSON.stringify({vault: v, dbs: ['db1','db2']});"
+            ] } },
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('BWC: POST /restore with vault+dbs returns HTTP 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test('BWC: POST /restore with vault+dbs returns task_id string', function () {",
+              "    pm.expect(pm.response.text().trim().length).to.be.above(0);",
+              "});"
+            ] } }
+          ]
+        },
+        {
+          "name": "POST /restore — with vault and changeDbNames",
+          "request": { "method": "POST", "url": "{{base_url}}/restore",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "" }
+          },
+          "event": [
+            { "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
+              "var v = pm.collectionVariables.get('backup_id');",
+              "if (!v) { pm.execution.skipRequest(); return; }",
+              "pm.request.body.raw = JSON.stringify({vault: v, dbs:['db1','db2'], changeDbNames:{db1:'new_db1'}});"
+            ] } },
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('BWC: POST /restore with changeDbNames returns HTTP 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test('BWC: POST /restore with changeDbNames returns task_id', function () {",
+              "    pm.expect(pm.response.text().trim().length).to.be.above(0);",
+              "});"
+            ] } }
+          ]
+        },
+        {
+          "name": "POST /restore — with ts (timestamp-based restore)",
+          "request": { "method": "POST", "url": "{{base_url}}/restore",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"ts\":\"0\"}" }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('BWC: POST /restore with ts returns HTTP 200 or 404', function () {",
+            "    pm.expect(pm.response.code).to.be.oneOf([200, 404]);",
+            "});",
+            "pm.test('BWC: POST /restore with ts Content-Type is application/json', function () {",
+            "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');",
+            "});"
+          ] } }]
+        },
+        {
+          "name": "POST /restore — without vault or ts returns 404 with error",
+          "request": { "method": "POST", "url": "{{base_url}}/restore",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{}" }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('BWC: POST /restore without vault/ts returns HTTP 404', function () {",
+            "    pm.response.to.have.status(404);",
+            "});",
+            "pm.test('BWC: POST /restore without vault/ts body has {status:\"Failed\", message}', function () {",
+            "    var j = pm.response.json();",
+            "    pm.expect(j.status).to.eql('Failed');",
+            "    pm.expect(j.message).to.be.a('string');",
+            "});"
+          ] } }]
+        },
+        {
+          "name": "POST /restore — with nonexistent vault returns 404",
+          "request": { "method": "POST", "url": "{{base_url}}/restore",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"vault\":\"nonexistent-vault-99999\"}" }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('BWC: POST /restore nonexistent vault returns HTTP 404', function () {",
+            "    pm.response.to.have.status(404);",
+            "});",
+            "pm.test('BWC: POST /restore nonexistent vault body has {status:\"Failed\", message}', function () {",
+            "    var j = pm.response.json();",
+            "    pm.expect(j.status).to.eql('Failed');",
+            "    pm.expect(j.message).to.be.a('string');",
+            "});"
+          ] } }]
+        },
+        {
+          "name": "POST /incremental/restore — without vault returns 404",
+          "request": { "method": "POST", "url": "{{base_url}}/incremental/restore",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{}" }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('BWC: POST /incremental/restore without vault returns HTTP 404 or 500', function () {",
+            "    pm.expect(pm.response.code).to.be.oneOf([404, 500]);",
+            "});",
+            "pm.test('BWC: POST /incremental/restore Content-Type is application/json', function () {",
+            "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');",
+            "});"
+          ] } }]
+        }
+      ]
+    },
+    {
+      "name": "BWC: POST /terminate",
+      "item": [
+        {
+          "name": "POST /terminate/:nonexistent — returns 404 with error",
+          "request": { "method": "POST", "url": "{{base_url}}/terminate/nonexistent-99999",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{}" }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('BWC: POST /terminate/nonexistent returns HTTP 404', function () {",
+            "    pm.response.to.have.status(404);",
+            "});",
+            "pm.test('BWC: POST /terminate/nonexistent Content-Type is application/json', function () {",
+            "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');",
+            "});",
+            "pm.test('BWC: POST /terminate/nonexistent body has {status:\"Failed\", message}', function () {",
+            "    var j = pm.response.json();",
+            "    pm.expect(j.status).to.eql('Failed');",
+            "    pm.expect(j.message).to.be.a('string');",
+            "});"
+          ] } }]
+        },
+        {
+          "name": "POST /terminate/:completed — returns 406 Not Acceptable",
+          "request": { "method": "POST", "url": "{{base_url}}/terminate/{{backup_id}}",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{}" }
+          },
+          "event": [
+            { "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
+              "if (!pm.collectionVariables.get('backup_id')) pm.execution.skipRequest();"
+            ] } },
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('BWC: POST /terminate/completed returns HTTP 406', function () {",
+              "    pm.response.to.have.status(406);",
+              "});",
+              "pm.test('BWC: POST /terminate/completed body has {status:\"Failed\", message}', function () {",
+              "    var j = pm.response.json();",
+              "    pm.expect(j.status).to.eql('Failed');",
+              "    pm.expect(j.message).to.be.a('string');",
+              "});"
+            ] } }
+          ]
+        },
+        {
+          "name": "POST /terminate/:id — with externalBackupPath",
+          "request": { "method": "POST", "url": "{{base_url}}/terminate/nonexistent-99999",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"externalBackupPath\":\"/some/path\"}" }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('BWC: POST /terminate with externalBackupPath returns HTTP 404', function () {",
+            "    pm.response.to.have.status(404);",
+            "});",
+            "pm.test('BWC: POST /terminate with externalBackupPath Content-Type is application/json', function () {",
+            "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');",
+            "});"
+          ] } }]
+        }
+      ]
+    },
+    {
+      "name": "BWC: GET /backup (download)",
+      "item": [
+        {
+          "name": "GET /backup/:existing — returns zip archive",
+          "request": { "method": "GET", "url": "{{base_url}}/backup/{{backup_id}}" },
+          "event": [
+            { "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
+              "if (!pm.collectionVariables.get('backup_id')) pm.execution.skipRequest();"
+            ] } },
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('BWC: GET /backup/:id returns HTTP 200', function(){ pm.response.to.have.status(200); });",
+              "pm.test('BWC: GET /backup/:id Content-Type is application/zip', function () {",
+              "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/zip');",
+              "});",
+              "pm.test('BWC: GET /backup/:id has Content-Disposition header', function () {",
+              "    pm.response.to.have.header('Content-Disposition');",
+              "});"
+            ] } }
+          ]
+        },
+        {
+          "name": "GET /backup/:nonexistent — returns 204 No Content",
+          "request": { "method": "GET", "url": "{{base_url}}/backup/nonexistent-99999" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('BWC: GET /backup/nonexistent returns HTTP 204', function () {",
+            "    pm.response.to.have.status(204);",
+            "});"
+          ] } }]
+        }
+      ]
+    },
+    {
+      "name": "BWC: GET /backup/s3",
+      "item": [
+        {
+          "name": "GET /backup/s3/:id — returns 204 when S3 is disabled",
+          "request": { "method": "GET", "url": "{{base_url}}/backup/s3/nonexistent" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('BWC: GET /backup/s3/:id returns HTTP 200 or 204', function () {",
+            "    pm.expect(pm.response.code).to.be.oneOf([200, 204]);",
+            "});",
+            "if (pm.response.code === 200) {",
+            "    pm.test('BWC: GET /backup/s3 response is array of URLs', function(){ pm.expect(pm.response.json()).to.be.an('array'); });",
+            "}"
+          ] } }]
+        }
+      ]
+    },
+    {
+      "name": "BWC: POST /evictionpolicy",
+      "item": [
+        {
+          "name": "POST /evictionpolicy — with valid policy returns Ok",
+          "request": { "method": "POST", "url": "{{base_url}}/evictionpolicy",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"fullEvictionPolicy\":\"1h/1h\"}" }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('BWC: POST /evictionpolicy returns HTTP 200', function(){ pm.response.to.have.status(200); });",
+            "pm.test('BWC: POST /evictionpolicy body contains \"Ok\"', function(){ pm.expect(pm.response.text()).to.include('Ok'); });"
+          ] } }]
+        },
+        {
+          "name": "POST /evictionpolicy — without fullEvictionPolicy returns 500",
+          "request": { "method": "POST", "url": "{{base_url}}/evictionpolicy",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{}" }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('BWC: POST /evictionpolicy without required field returns HTTP 500', function () {",
+            "    pm.response.to.have.status(500);",
+            "});"
+          ] } }]
+        },
+        {
+          "name": "POST /incremental/evictionpolicy — returns 200 or 500",
+          "request": { "method": "POST", "url": "{{base_url}}/incremental/evictionpolicy",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"fullEvictionPolicy\":\"1h/1h\"}" }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('BWC: POST /incremental/evictionpolicy returns HTTP 200 or 500', function () {",
+            "    pm.expect(pm.response.code).to.be.oneOf([200, 500]);",
+            "});"
+          ] } }]
+        }
+      ]
+    },
+    {
+      "name": "BWC: POST /evict",
+      "item": [
+        {
+          "name": "POST /evict — triggers eviction, returns Ok",
+          "request": { "method": "POST", "url": "{{base_url}}/evict" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('BWC: POST /evict returns HTTP 200', function(){ pm.response.to.have.status(200); });",
+            "pm.test('BWC: POST /evict body contains \"Ok\"', function(){ pm.expect(pm.response.text()).to.include('Ok'); });"
+          ] } }]
+        },
+        {
+          "name": "POST /evict/:nonexistent — returns 404",
+          "request": { "method": "POST", "url": "{{base_url}}/evict/nonexistent-vault-99999" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('BWC: POST /evict/nonexistent returns HTTP 404', function(){ pm.response.to.have.status(404); });",
+            "pm.test('BWC: POST /evict/nonexistent Content-Type is application/json', function () {",
+            "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');",
+            "});"
+          ] } }]
+        },
+        {
+          "name": "POST /incremental/evict — returns 200 or 500",
+          "request": { "method": "POST", "url": "{{base_url}}/incremental/evict" },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('BWC: POST /incremental/evict returns HTTP 200 or 500', function () {",
+            "    pm.expect(pm.response.code).to.be.oneOf([200, 500]);",
+            "});"
+          ] } }]
+        }
+      ]
+    },
+    {
+      "name": "BWC: POST /external/restore",
+      "item": [
+        {
+          "name": "POST /external/restore — returns 200 or 500 (known issue)",
+          "request": { "method": "POST", "url": "{{base_url}}/external/restore",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{}" }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('BWC: POST /external/restore returns HTTP 200 or 500', function () {",
+            "    pm.expect(pm.response.code).to.be.oneOf([200, 500]);",
+            "});",
+            "pm.test('BWC: POST /external/restore Content-Type is application/json', function () {",
+            "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');",
+            "});"
+          ] } }]
+        }
+      ]
+    }
+  ]
+}
