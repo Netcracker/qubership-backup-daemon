@@ -1,5 +1,14 @@
 # Backup Daemon release process
 
+> **Deprecated.** Active development has moved to
+> **[qubership-backup-daemon-go](https://github.com/Netcracker/qubership-backup-daemon-go)**.
+> Use the container image and documentation from that repository for new
+> deployments and integrations.
+>
+> This repository is retained **only for occasional legacy support**. If you
+> still run this stack, plan to **migrate to the new image** from the Go-based
+> project.
+
 - [Backup daemon release process](#backup-daemon-release-process)
   - [Pull requests](#pull-requests)
   - [Release](#release)
