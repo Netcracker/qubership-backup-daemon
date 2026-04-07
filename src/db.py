@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import logging
+import threading
 import apsw
 
 
@@ -29,6 +30,8 @@ class DbException(Exception):
 
 
 class DB:
+    _lock = threading.Lock()
+    
     def __init__(self, dbfile):
         """
         Create a connection to sqlite database
@@ -41,7 +44,7 @@ class DB:
         self.__dbfile = dbfile
         try:
             log.debug("Database file: %s" % self.__dbfile)
-            self.__cursor = DB.__create_connection(dbfile).cursor()
+            self.__conn = DB.__create_connection(dbfile)
         except apsw.Error as err:
             log.exception("Database error during init: %s" % err)
             raise DbException("Database error during init")
@@ -67,24 +70,27 @@ class DB:
 
     def __create_table(self, query):
         try:
-            self.__cursor.execute(query)
+            cursor = self.__conn.cursor()
+            with cursor:
+                cursor.execute(query)
         except apsw.Error as err:
             log.exception("Database Error: %s" % err)
             return 0
 
     @staticmethod
     def __log_and_execute(cursor, sql, args):
-        log.debug("SQL command: " + sql.replace('?', '%s') % args)
-        cursor.execute(sql, args)
+        with DB._lock:
+            log.debug("SQL command: " + sql.replace('?', '%s') % args)
+            cursor.execute(sql, args)
 
     def __insert_or_delete(self, query, params, login=False):
         try:
             if login:
                 cursor = DB.__create_connection(self.__dbfile).cursor()
             else:
-                cursor = self.__cursor
-
-            DB.__log_and_execute(cursor, query, params)
+                cursor = self.__conn.cursor()
+            with cursor:
+                DB.__log_and_execute(cursor, query, params)
             return 1
         except apsw.Error as err:
             log.exception("Database Error: %s" % err)
@@ -95,10 +101,10 @@ class DB:
             if login:
                 cursor = DB.__create_connection(self.__dbfile).cursor()
             else:
-                cursor = self.__cursor
-
-            DB.__log_and_execute(cursor, query, params)
-            return cursor.fetchall()
+                cursor = self.__conn.cursor()
+            with cursor:
+                DB.__log_and_execute(cursor, query, params)
+                return cursor.fetchall()
         except apsw.Error as err:
             log.exception("Database Error: %s" % err)
             return None
